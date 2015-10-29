@@ -212,9 +212,11 @@ global with sharing class UserResource extends ScimResource {
             error = e.getMessage();
         }
         
-        // In order to be able to create users with PermSets I moved this declaration up here
+        // In order to be able to create users with PermSets and Groups I moved this declaration up here
         // I bet there is a better way to handle the problem
         List<PermissionSetAssignment> newPsas = new List<PermissionSetAssignment>();        
+        List<GroupMember> newGMs = new List<GroupMember>();
+
         if (res.statusCode == 201) {
             if ( isUpdate ) {
                 if ((user.id != null) && ( user.id != u.id)) {
@@ -411,7 +413,7 @@ global with sharing class UserResource extends ScimResource {
                 error += 'BAD REQUEST:password_reset_failed_because_one_or_more_users_are_inactive;';  
                 res.statusCode = 400;
             }
-                        
+            
             if (user.roles != null) { 
                 if ((user.roles.isEmpty()) || (user.roles.size() != 1) ) {
                     error += 'INVALID:user_must_have_only_one_role;';  
@@ -522,11 +524,79 @@ global with sharing class UserResource extends ScimResource {
                 error += 'REQUIRED_FIELD_MISSING:user_must_have_one_entitlement_which_must_be_a_profileid;';  
                 res.statusCode = 500;
             }            
+
+            //Groups
+           // PUT, PATCH, DELETE
+           // Like PermSets Groups have to be added after user exists
+            if ( user.groups != null && !user.groups.isEmpty() && !isCreate){
+                boolean isMetaDelete = false;
+                List<String> attributes = user.attributes;
+                if (isPatch && attributes != null) {
+                    for (String attribute : attributes) {
+                        if ('entitlements'.equals(attribute)) {
+                            isMetaDelete = true;
+                        }
+                    }
+                }
+                
+				List<GroupMember> existingGroups = [select Id, GroupId from GroupMember where UserOrGroupId = :u.id];
+                List<GroupMember> toDeleteGMs = new List<GroupMember>();
+                Map<Id, GroupMember> existingIdToGroups = new Map<Id, GroupMember>();
+                for (GroupMember gm : existingGroups) {
+                    existingIdToGroups.put(gm.GroupId, gm);
+                }
             
-            if ( (user.groups != null) && (!user.groups.isEmpty()) ) {
-                error += 'BAD REQUEST:group is read-only;';  
-                res.statusCode = 400;
-            } 
+                Set<Id> existingGroupIds = existingIdToGroups.keySet();
+                List<GroupMember> toDeleteGroups = new List<GroupMember>();
+                
+                for (Map<String,String> groupIdMap : user.groups) {
+                    String groupId = (String) groupIdMap.get('value');
+                    Boolean isDelete = !isMetaDelete && 'delete'.equals(groupIdMap.get('operation'));
+                    if (groupId != null){
+                        if (!existingGroupIds.contains(groupId)){
+                            GroupMember thisGm = new GroupMember();
+                            thisGm.UserOrGroupId = u.id;
+                            thisGm.GroupId = groupId;
+                            newGMs.add(thisGm);
+                        } else {
+                            if (isDelete) {
+                                toDeleteGMs.add(existingIdtoGroups.get(groupId));
+                            }
+                        }
+                    }
+                }
+				Database.DeleteResult[] deleteDRs = Database.delete(toDeleteGms, false);
+                for (Database.DeleteResult thisDR : deleteDRs) {
+                	if (!thisDR.isSuccess()) {
+                		for (Database.Error thisError : thisDR.getErrors()) {
+                			error += 'INVALID:' + thisError.getMessage() + ';';
+                		}
+                		res.statusCode = 400;
+                	}
+                }
+                
+                Database.SaveResult[] newSRs = Database.insert(newGMs, false);
+                for (Database.SaveResult thisSR : newSRs) {
+                	if (!thisSR.isSuccess()) {
+                		for (Database.Error thisError : thisSR.getErrors()) {
+                			error += 'INVALID:' + thisError.getMessage() + ';';
+                		}
+                		res.statusCode = 400;
+                	}
+                }                
+            }
+            
+            // POST
+            // Like PermSets, add Groups to the list and insert them after user create
+            if ( user.groups != null && !user.groups.isEmpty() && isCreate){
+                for (Map<String,String> groupIdMap : user.groups) {
+                    String groupId = (String) groupIdMap.get('value');
+                        GroupMember thisGm = new GroupMember();
+                        thisGm.UserOrGroupId = null; //will assign after user crate
+                        thisGm.GroupId = groupId;
+                        newGMs.add(thisGm);
+                }
+            }
             
             if ( user.employeeNumber != null) {
                 u.employeeNumber = user.employeeNumber;
@@ -709,7 +779,25 @@ global with sharing class UserResource extends ScimResource {
                             }
                         }                        
                     }
-
+					// now do Group assignments
+					List<GroupMember> updatedGMs = new List<GroupMember>();
+                    for (GroupMember gm : newGMs){
+                        GroupMember tempGM = new GroupMember();
+                        tempGM.GroupId = gm.GroupId;
+                        tempGM.UserOrGroupId = u.id;
+                        updatedGMs.add(tempGM);
+                    }
+                    if (!newPsas.isEmpty()){
+                        Database.SaveResult[] newSRs = Database.insert(updatedGMs, false);
+                        for (Database.SaveResult thisSR : newSRs) {
+                            if (!thisSR.isSuccess()) {
+                                for (Database.Error thisError : thisSR.getErrors()) {
+                                    error += 'INVALID:' + thisError.getMessage() + ';';
+                                }
+                                res.statusCode = 400;
+                            }
+                        }                        
+                    }                    
                     if (user.password != null) {
                         System.setPassword(u.id, user.password);
                     }
