@@ -27,12 +27,15 @@ global class EntitlementResource extends ScimResource {
         Integer numParts = uriParts.size() - 1;
         
         Boolean isFound = false;
+        String entitlementType ='';
         String entitlementId = uriParts[numParts];
         if (entitlementId.startsWith('00e')) {
             isFound = !([select ID from Profile where ID = :entitlementId].isEmpty());
+            entitlementType = 'profile';
         }
         else if (entitlementId.startsWith('0PS')) {
             isFound = !([select ID from PermissionSet where ID = :entitlementId].isEmpty());
+            entitlementType = 'permissionSet';
         }
         
         if (numParts >= 4 || !isFound) { 
@@ -42,55 +45,87 @@ global class EntitlementResource extends ScimResource {
             return;
         }        
         
+        EntitlementPatchParser entitlementPP = EntitlementPatchParser.parse(req.requestBody.toString());
+        String schema = entitlementPP.schemas.get(0);
+        if (!schema.equals('urn:ietf:params:scim:api:messages:2.0:PatchOp')){
+            res.statusCode = 400;
+            res.responseBody = SCIMError.serializeError(res.statusCode, 'Improper Schema.', req.headers.containsKey('X-Prettyprint'));
+            return;
+        }
+
+        List<String> usersToProcess = new List<String>();
+        String operation = entitlementPP.Operations[0].op;
+
+        String path = entitlementPP.Operations[0].path;
+        if (path != 'members') {
+            //throw error
+        }
+
+        List<EntitlementPatchParser.Value> memberList = entitlementPP.Operations[0].value;
+        
         Savepoint sp = Database.setSavepoint();
         try {
-	        if (entitlementId.startsWith('0PS')) {
-	            // PermissionSets
-	            System.JSONParser psParser = System.JSON.createParser(req.requestBody.toString());
-	            entitlementId = doUpdatePermissionSet(entitlementId, psParser);
-	        }
-	        else {
-	            System.JSONParser parser = System.JSON.createParser(req.requestBody.toString());
-	            List<Map<String,String>> members;
-	            while (parser.nextToken() != null) {
-	                if ((parser.getCurrentToken() == JSONToken.FIELD_NAME) && (parser.getText() == 'members')) {    
-	                    members = ScimResource.parseObjectArray('members', parser);                            
-	                }
-	            }
-	            if ( members != null ) {
-	                for ( Map<String,String> member : members ) {
-	                    String userid;
-	                    if (member.containsKey('value')) userid = member.get('value');
-	                    if (userid != null) {
-	                        // TODO: bulk this
-	                        List<User> users = [Select ID from User where Id = :userid];
-	                        if (users.size() == 0) {
-	                        	throw new ScimException('Invalid: user ID is invalid ' + userid);
-	                        }
-	                        User user = users.get(0);
-	                        if (entitlementId.startsWith('00e')) {
-	                            // Profiles
-	                            // Note: profile has no meaningful semantics for operation:delete or meta:attributes:members
-	                            // since a user cannot have no profile.
-	                            // we ignore such requests.
-	                            user.ProfileId = uriParts[numParts];
-	                            update user;
-	                        }
-	                    } 
-	                }
-	            }
-	        }
-	        
-	        // retrieve self
-	        if (entitlementId != null) {
-	            doGet();
-	        }
-        }
-        catch (Exception e) {
+            if (entitlementType == 'profile'){
+                if (operation == 'add'){
+                    //not meaningful
+					ScimException scimEx = new ScimException('Cannot add a profile to an existing user');
+                    scimEx.setStatusCode(400);
+                    throw scimEx;
+                } else if (operation == 'replace'){
+                    for (EntitlementPatchParser.Value userValue : memberList){
+						User u = [select id from User where id = :userValue.value];
+                        u.ProfileId = entitlementId;
+                        update u;
+                    }
+                } else if (operation == 'remove'){
+                    //not meaningful
+					ScimException scimEx = new ScimException('Cannot remove a profile from an existing user');
+                    scimEx.setStatusCode(400);
+                    throw scimEx;
+                }
+            } else if (entitlementType == 'permissionSet'){
+                if (operation == 'add'){
+                    for (EntitlementPatchParser.Value userValue : memberList){
+                            PermissionSetAssignment newPsa = new PermissionSetAssignment();
+                            newPsa.assigneeId = userValue.value;
+                            newPsa.permissionSetId = entitlementId;
+                            insert newPsa;                        
+                    }
+                } else if (operation == 'replace'){
+                    for (EntitlementPatchParser.Value userValue : memberList){
+                        //delete the current user's assignments
+						List<PermissionSetAssignment> assignedPS = [SELECT Id FROM PermissionSetAssignment where AssigneeId = :userValue.value and permissionSetId in (select id from PermissionSet where isOwnedByProfile = false)];
+                        delete assignedPS;
+                        
+                        //add the new value
+                        PermissionSetAssignment newPsa = new PermissionSetAssignment();
+                        newPsa.assigneeId = userValue.value;
+                        newPsa.permissionSetId = entitlementId;
+						System.debug('new permset: ' + newPSA);
+                        insert newPsa;                        
+                    }
+                } else if (operation == 'remove'){
+                    for (EntitlementPatchParser.Value userValue : memberList){
+                        //delete the current user's assignments
+						List<PermissionSetAssignment> assignedPS = [select id from PermissionSetAssignment where PermissionSetId = :entitlementId and AssigneeId = :userValue.value];
+                        delete assignedPS;
+                    }
+                }
+            }
+            
+        } catch (Exception e) {
             res.addHeader('Content-Type', 'application/json');
-            res.statusCode = 500;
+            if (res.statusCode == null) {
+                res.statusCode = 500;
+            } 
             res.responseBody = ScimError.serializeError(res.statusCode, e.getMessage(), req.headers.containsKey('X-Prettyprint'));
             Database.rollback(sp);  
+        }
+
+        res.statusCode = 204;
+        // retrieve self
+        if (entitlementId != null) {
+            doGet();
         }
     }
     

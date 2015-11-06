@@ -66,49 +66,54 @@ global class GroupResource extends ScimResource {
             return;
         }
         
-        List<String> membersToBeAdded = new List<String>();
-        List<String> membersToBeRemoved = new List<String>();
-        for (GroupPatchParser.Operations op : groupPP.Operations){
-            System.debug(groupPP.Operations);
-            if (op.op == 'add' || op.op == 'replaced'){
-                //add to list to be upserted
-                for (GroupPatchParser.Value v : op.value){
-                    membersToBeAdded.add(v.value);
-                }
-            } else if (op.op == 'delete'){
-                //add to list to be deleted
-                for (GroupPatchParser.Value v : op.value){
-                    membersToBeRemoved.add(v.value);
-                }
-            }
+        List<String> usersToProcess = new List<String>();
+        String operation = groupPP.Operations[0].op;
+        if (groupPP.Operations[0].path != 'members'){
+            res.statusCode = 400;
+            res.responseBody = SCIMError.serializeError(res.statusCode, 'Can only patch members', req.headers.containsKey('X-Prettyprint'));
+        	return;
         }
-        
-        if (!membersToBeAdded.isEmpty()){
-            for (String member : membersToBeAdded){
-                GroupMember newGroupMember = new GroupMember();
-                newGroupMember.GroupId = groupId;
-                newGroupMember.UserOrGroupId = member;
-                insert newGroupMember;
-            }
+        List<GroupPatchParser.Value> values = groupPP.Operations[0].value;
+        for (GroupPatchParser.Value v : values){
+			usersToProcess.add(v.value);
         }
 		
-        if (!membersToBeRemoved.isEmpty()){
-            for (String member : membersToBeRemoved){
-                List<GroupMember> groupMember = [Select Id from GroupMember where GroupId = :groupId AND UserOrGroupId = :member];
-                if (!groupMember.isEmpty()) {
-                    Database.delete(groupMember, true);
-                }                                    
-            }            
-        }        
-
+        if (!usersToProcess.isEmpty()){
+            // if 'replace' clear the group assignments then add
+            if (operation == 'replace'){
+                for (String user : usersToProcess){
+                    List<GroupMember> groupMember = [Select Id from GroupMember where UserOrGroupId = :user];
+                    if (!groupMember.isEmpty()) {
+                        Database.delete(groupMember, true);
+                    }                                    
+                }                            
+            }
+            if (operation == 'add' || operation == 'replace') {
+                for (String user : usersToProcess){
+                    GroupMember newGroupMember = new GroupMember();
+                    newGroupMember.GroupId = groupId;
+                    newGroupMember.UserOrGroupId = user;
+                    insert newGroupMember;
+                }             
+                res.statusCode = 204;                            
+            } else if (operation == 'remove'){
+                for (String user : usersToProcess){
+                    List<GroupMember> groupMember = [Select Id from GroupMember where GroupId = :groupId AND UserOrGroupId = :user];
+                    if (!groupMember.isEmpty()) {
+                        Database.delete(groupMember, true);
+                    }                                    
+                }            
+                res.statusCode = 204;                            
+            } else {
+                res.statusCode = 400;
+                res.responseBody = SCIMError.serializeError(res.statusCode, 'Improper Operations', req.headers.containsKey('X-Prettyprint'));
+				return;
+            }
+        }
         if (groupId != null) {
             // retrieve self
             doGet(groupId, null, false);
         }
-        
-/*                
-        Id groupId = doUpsert(uriParts[numParts], parser);
-*/
     }
 
     
@@ -175,25 +180,14 @@ global class GroupResource extends ScimResource {
                 for ( Map<String,String> member : members ) {
                     String userOrGroupId;
                     if (member.containsKey('value')) userOrGroupId = member.get('value');
-                    String operation = member.get('operation');
-                    if ('delete'.equals(operation)) {
-                        // delete if there
+                    if (userOrGroupId != null) {
                         List<GroupMember> groupMember = [Select Id from GroupMember where GroupId = :groupId AND UserOrGroupId = :userOrGroupId];
-                        if (!groupMember.isEmpty()) {
-                            Database.delete(groupMember, true);
-                        }                    
-                    }
-                    else {
-                        // add if not there
-                        if (userOrGroupId != null) {
-                            List<GroupMember> groupMember = [Select Id from GroupMember where GroupId = :groupId AND UserOrGroupId = :userOrGroupId];
-                            if (groupMember.isEmpty()) {
-                                GroupMember newGroupMember = new GroupMember();
-                                newGroupMember.groupId = groupId;
-                                newGroupMember.UserOrGroupId = userOrGroupId;
-                                insert newGroupMember;
-                            }
-                        } 
+                        if (groupMember.isEmpty()) {
+                            GroupMember newGroupMember = new GroupMember();
+                            newGroupMember.groupId = groupId;
+                            newGroupMember.UserOrGroupId = userOrGroupId;
+                            insert newGroupMember;
+                    } 
                     }
                 }
             }  

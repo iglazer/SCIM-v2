@@ -1082,7 +1082,7 @@ global with sharing class UserResource extends ScimResource {
                     gen.writeStartArray();
                         gen.writeStartObject();
                             gen.writeStringField('value', user.ProfileId);
-                           	gen.writeStringField('$ref', '../Entitlements/' + user.ProfileId);                    
+                           	gen.writeStringField('$ref', '/Entitlements/' + user.ProfileId);                    
                             gen.writeStringField('display', user.Profile.Name);   
                     		gen.writeStringField('type', 'Profile');
                             gen.writeBooleanField('primary', true);
@@ -1092,7 +1092,7 @@ global with sharing class UserResource extends ScimResource {
                             for (PermissionSetAssignment assignment : assignments) {
                             gen.writeStartObject();
                                 gen.writeStringField('value', assignment.PermissionSetId);
-	                           	gen.writeStringField('$ref', '../Entitlements/' + assignment.PermissionSetId);                    
+	                           	gen.writeStringField('$ref', '/Entitlements/' + assignment.PermissionSetId);                    
                                 gen.writeStringField('display', assignment.PermissionSet.Name);                        
 	                    		gen.writeStringField('type', 'Permission Set');
                                 gen.writeBooleanField('primary', false);
@@ -1110,7 +1110,7 @@ global with sharing class UserResource extends ScimResource {
                             for ( GroupMember membership : memberships ) {
                                 gen.writeStartObject();
                                     gen.writeStringField('value', membership.GroupId);
-                                	gen.writeStringField('$ref', '../Groups/' + membership.GroupId);
+                                	gen.writeStringField('$ref', '/Groups/' + membership.GroupId);
                                     gen.writeStringField('display', membership.Group.Name);
                                 gen.writeEndObject();        
                             }
@@ -1123,7 +1123,7 @@ global with sharing class UserResource extends ScimResource {
                     gen.writeStartArray();
                         gen.writeStartObject();
                             gen.writeStringField('value', user.UserRoleId);
-                            gen.writeStringField('$ref', '../Entitlements/' + user.UserRoleId);
+                            gen.writeStringField('$ref', '/Roles/' + user.UserRoleId);
                             gen.writeStringField('display', user.UserRole.Name);
                         gen.writeEndObject();  
                     gen.writeEndArray(); 
@@ -1141,7 +1141,7 @@ global with sharing class UserResource extends ScimResource {
                             gen.writeFieldName('manager'); 
                             gen.writeStartObject();
                                 gen.writeStringField('managerId', user.managerId);
-                                gen.writeStringField('$ref', '../Users/' + user.managerId);
+                                gen.writeStringField('$ref', '/Users/' + user.managerId);
                             	gen.writeStringField('displayName', user.manager.Name);
                             gen.writeEndObject();   
                         }
@@ -1149,7 +1149,7 @@ global with sharing class UserResource extends ScimResource {
                             gen.writeFieldName('delegatedApprover'); 
                             gen.writeStartObject();
                                 gen.writeStringField('delegatedApproverId', user.delegatedApproverId);
-                                gen.writeStringField('$ref', '../Users/' + user.delegatedApproverId);
+                                gen.writeStringField('$ref', '/Users/' + user.delegatedApproverId);
                             String delegatedApproverId = user.delegatedApproverId;
                                 if (delegatedApproverId != null && delegatedApproverId.startsWith('005')) {
                                     gen.writeStringField('displayName', userApproverMap.get(user.delegatedApproverId).Name);

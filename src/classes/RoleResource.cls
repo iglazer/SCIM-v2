@@ -62,14 +62,55 @@ global class RoleResource extends ScimResource {
         String[] uriParts = req.requestURI.split('/',0);
         Integer numParts = uriParts.size() - 1;   
         
-        if (numParts >= 4) { 
+        if (numParts >= 4  || [select id from UserRole where id = :uriParts[numParts]].size()==0){ 
             res.statusCode = 404;
             res.responseBody = SCIMError.serializeError(res.statusCode, 'No such resource.', req.headers.containsKey('X-Prettyprint'));
             return;
-        }                
+        }
         
-        System.JSONParser parser = System.JSON.createParser(req.requestBody.toString());
-        Id roleId = doUpsert(uriParts[numParts], parser);
+        String roleId = uriParts[numParts];
+		RolePatchParser rolePP = RolePatchParser.parse(req.requestBody.toString());
+		
+        String schema = rolePP.schemas.get(0);
+        if (!schema.equals('urn:ietf:params:scim:api:messages:2.0:PatchOp')){
+            res.statusCode = 400;
+            res.responseBody = SCIMError.serializeError(res.statusCode, 'Improper Schema.', req.headers.containsKey('X-Prettyprint'));
+            return;
+        }
+
+        List<String> usersToProcess = new List<String>();
+        String operation = rolePP.Operations[0].op;
+        String userId = rolePP.Operations[0].value[0].value;
+        User u = [select id, userRoleId from User where id = :userId];
+        
+        if (operation == 'add'){
+            if (u.userRoleId == null) {
+                u.userRoleId = roleId;
+                update u;
+                res.statusCode = 204;
+            } else {
+                res.statusCode = 400;
+                res.responseBody = SCIMError.serializeError(res.statusCode, 'Cannot \'add\' role to user who already has a role. Use \'replace\'', req.headers.containsKey('X-Prettyprint'));   
+            }
+        } else if (operation == 'replace'){
+            u.userRoleId = roleId;
+            update u;                    
+            res.statusCode = 204;            
+        } else if  (operation == 'remove'){
+            if (roleId == u.UserRoleId){
+                u.UserRoleId = null;
+                update u;
+                res.statusCode = 204;                            
+            } else {
+                res.statusCode = 400;
+                res.responseBody = SCIMError.serializeError(res.statusCode, 'Cannot remove a role that the user doesn\'t have', req.headers.containsKey('X-Prettyprint'));                    
+            }
+        } else {
+            res.statusCode = 400;
+            res.responseBody = SCIMError.serializeError(res.statusCode, 'Improper Operations', req.headers.containsKey('X-Prettyprint'));
+			return;
+        }
+        
         if (roleId != null) {
             // retrieve self
             doGet(roleId, null, false);
