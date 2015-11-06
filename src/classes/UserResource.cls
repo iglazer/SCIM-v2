@@ -848,6 +848,9 @@ global with sharing class UserResource extends ScimResource {
         
         User[] u = Database.query('select id, isActive from user where id=\'' + uriParts[numParts] + '\'');
         if(u.size() == 1 && u[0].isActive) {
+            //TODO Add check for certain conditions that make delete not so simple
+            //Matt to provide
+//            User[] userRefedBy = Database.query('select id from user where id=\'' + uriParts[numParts] + '\'');
         	u[0].isActive = false;
         	update u[0];
         	res.statusCode = 200;

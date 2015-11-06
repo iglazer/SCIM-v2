@@ -11,6 +11,7 @@ global class GroupResource extends ScimResource {
         Group[] g = Database.query('select id from group where id=\'' + uriParts[numParts] + '\'');
         if(g.size() == 1) {
         	delete g[0];
+            res.statusCode = 204;
         } else {
             res.statusCode = 404;
             res.responseBody = SCIMError.serializeError(res.statusCode, 'No such resource.', req.headers.containsKey('X-Prettyprint'));
@@ -32,12 +33,13 @@ global class GroupResource extends ScimResource {
             return;
         }                
         
-        // put means we clear all the members whatsoever and then call patch
+        // put means we clear all the members whatsoever and then upsert
         String groupId = uriParts[numParts];
         List<GroupMember> groupMembers = [Select Id from GroupMember where GroupId = :groupId];
         Database.delete(groupMembers, true);
-        
-        doPatch();
+
+		doUpsert(groupId, System.JSON.createParser(req.requestBody.toString()));
+
     }
 
     @HttpPatch
@@ -48,19 +50,68 @@ global class GroupResource extends ScimResource {
         String[] uriParts = req.requestURI.split('/',0);
         Integer numParts = uriParts.size() - 1;   
         
-        if (numParts >= 4) { 
+        if (numParts >= 4  || [select id from group where id = :uriParts[numParts]].size()==0){ 
             res.statusCode = 404;
             res.responseBody = SCIMError.serializeError(res.statusCode, 'No such resource.', req.headers.containsKey('X-Prettyprint'));
             return;
-        }                
+        }
+		
+        String groupId = uriParts[numParts];
+		GroupPatchParser groupPP = GroupPatchParser.parse(req.requestBody.toString());
+		
+        String schema = groupPP.schemas.get(0);
+        if (!schema.equals('urn:ietf:params:scim:api:messages:2.0:PatchOp')){
+            res.statusCode = 400;
+            res.responseBody = SCIMError.serializeError(res.statusCode, 'Improper Schema.', req.headers.containsKey('X-Prettyprint'));
+            return;
+        }
         
-        System.JSONParser parser = System.JSON.createParser(req.requestBody.toString());
-        Id groupId = doUpsert(uriParts[numParts], parser);
+        List<String> membersToBeAdded = new List<String>();
+        List<String> membersToBeRemoved = new List<String>();
+        for (GroupPatchParser.Operations op : groupPP.Operations){
+            System.debug(groupPP.Operations);
+            if (op.op == 'add' || op.op == 'replaced'){
+                //add to list to be upserted
+                for (GroupPatchParser.Value v : op.value){
+                    membersToBeAdded.add(v.value);
+                }
+            } else if (op.op == 'delete'){
+                //add to list to be deleted
+                for (GroupPatchParser.Value v : op.value){
+                    membersToBeRemoved.add(v.value);
+                }
+            }
+        }
+        
+        if (!membersToBeAdded.isEmpty()){
+            for (String member : membersToBeAdded){
+                GroupMember newGroupMember = new GroupMember();
+                newGroupMember.GroupId = groupId;
+                newGroupMember.UserOrGroupId = member;
+                insert newGroupMember;
+            }
+        }
+		
+        if (!membersToBeRemoved.isEmpty()){
+            for (String member : membersToBeRemoved){
+                List<GroupMember> groupMember = [Select Id from GroupMember where GroupId = :groupId AND UserOrGroupId = :member];
+                if (!groupMember.isEmpty()) {
+                    Database.delete(groupMember, true);
+                }                                    
+            }            
+        }        
+
         if (groupId != null) {
             // retrieve self
             doGet(groupId, null, false);
         }
+        
+/*                
+        Id groupId = doUpsert(uriParts[numParts], parser);
+*/
     }
+
+    
     
     public static Id doUpsert(String groupId, System.JSONParser parser) {
         

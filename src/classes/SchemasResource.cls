@@ -12,19 +12,19 @@ global class SchemasResource {
 		Boolean doGroup = true;
 		Boolean doEntitlement = true;
 		Boolean doRole = true;
-        if (schemaType.equalsIgnoreCase('urn:ietf:params:scim:schemas:core:2.0:User')) {
+        if (schemaType.equalsIgnoreCase('urn:ietf:params:scim:schemas:core:2.0:User') || schemaType.equalsIgnoreCase('Users')) {
             doGroup = false;
             doEntitlement = false;
             doRole = false;
-        } else if (schemaType.equalsIgnoreCase('urn:ietf:params:scim:schemas:core:2.0:Group')) {
+        } else if (schemaType.equalsIgnoreCase('urn:ietf:params:scim:schemas:core:2.0:Group') || schemaType.equalsIgnoreCase('Groups')) {
             doUser = false;
             doEntitlement = false;
             doRole = false;            
-        } else if (schemaType.equalsIgnoreCase('urn:salesforce:schemas:extension:1.0:Entitlement')) {
+        } else if (schemaType.equalsIgnoreCase('urn:salesforce:schemas:extension:1.0:Entitlement') || schemaType.equalsIgnoreCase('Entitlements')) {
             doUser = false;
             doGroup = false;
             doRole = false;            
-        } else if (schemaType.equalsIgnoreCase('urn:salesforce:schemas:extension:1.0:Role')) {
+        } else if (schemaType.equalsIgnoreCase('urn:salesforce:schemas:extension:1.0:Role') || schemaType.equalsIgnoreCase('Roles')) {
             doUser = false;
             doGroup = false;
             doEntitlement = false;            
@@ -43,7 +43,8 @@ global class SchemasResource {
     
     private static Blob serializeSchemas(boolean prettyPrint, Boolean doUser, Boolean doGroup, Boolean doEntitlement, Boolean doRole) {
         Integer totalResults = 4;
-        if (!doUser) totalResults--;        
+
+        if (!doUser) totalResults--;
         if (!doGroup) totalResults--;
         if (!doEntitlement) totalResults--;
         if (!doRole) totalResults--;
