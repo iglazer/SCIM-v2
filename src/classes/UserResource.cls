@@ -1258,6 +1258,27 @@ global with sharing class UserResource extends ScimResource {
         }        
     }
 
+    @HttpPost
+    global static void doPost() {
+        RestRequest req = RestContext.request;
+        RestResponse res = RestContext.response;
+        String method = req.headers.get('X-HTTP-Method-Override');
+        if ( method == null ) method = 'POST';
+        if ( method.equals('DELETE') ) {
+            doDelete(req,res); 
+        }else {
+            User user = new User();
+            doCreateOrUpdate(req, res, user, method); 
+        }
+    }    
+    
+    @HttpDelete
+    global static void doDelete() {
+        RestRequest req = RestContext.request;
+        RestResponse res = RestContext.response;
+        doDelete(req, res);
+    }    
+
     @HttpPut
     global static void doPut() {
         RestRequest req = RestContext.request;
@@ -1320,7 +1341,7 @@ global with sharing class UserResource extends ScimResource {
              res.responseBody = ScimError.serializeError(res.statusCode, e.getMessage(), req.headers.containsKey('X-Prettyprint'));
         } 
     }
-
+    
     @HttpPatch
     global static void doPatch() {
         RestRequest req = RestContext.request;
@@ -1338,25 +1359,5 @@ global with sharing class UserResource extends ScimResource {
         doCreateOrUpdate(req, res, user, 'PATCH'); 
     }
 
-    @HttpPost
-    global static void doPost() {
-        RestRequest req = RestContext.request;
-        RestResponse res = RestContext.response;
-        String method = req.headers.get('X-HTTP-Method-Override');
-        if ( method == null ) method = 'POST';
-        if ( method.equals('DELETE') ) {
-            doDelete(req,res); 
-        }else {
-            User user = new User();
-            doCreateOrUpdate(req, res, user, method); 
-        }
-    }    
-    
-    @HttpDelete
-    global static void doDelete() {
-        RestRequest req = RestContext.request;
-        RestResponse res = RestContext.response;
-        doDelete(req, res);
-    }    
    
 }

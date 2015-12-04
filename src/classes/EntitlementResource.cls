@@ -53,73 +53,86 @@ global class EntitlementResource extends ScimResource {
             return;
         }
 
-        List<String> usersToProcess = new List<String>();
-        String operation = entitlementPP.Operations[0].op;
-
-        String path = entitlementPP.Operations[0].path;
-        if (path != 'members') {
-            //throw error
-        }
-
         List<EntitlementPatchParser.Value> memberList = entitlementPP.Operations[0].value;
         
         Savepoint sp = Database.setSavepoint();
         try {
-            if (entitlementType == 'profile'){
-                if (operation == 'add'){
-                    //not meaningful
-					ScimException scimEx = new ScimException('Cannot add a profile to an existing user');
-                    scimEx.setStatusCode(400);
-                    throw scimEx;
-                } else if (operation == 'replace'){
-                    for (EntitlementPatchParser.Value userValue : memberList){
-						User u = [select id from User where id = :userValue.value];
-                        u.ProfileId = entitlementId;
-                        update u;
-                    }
-                } else if (operation == 'remove'){
-                    //not meaningful
-					ScimException scimEx = new ScimException('Cannot remove a profile from an existing user');
-                    scimEx.setStatusCode(400);
-                    throw scimEx;
-                }
-            } else if (entitlementType == 'permissionSet'){
-                if (operation == 'add'){
-                    for (EntitlementPatchParser.Value userValue : memberList){
-                            PermissionSetAssignment newPsa = new PermissionSetAssignment();
-                            newPsa.assigneeId = userValue.value;
-                            newPsa.permissionSetId = entitlementId;
-                            insert newPsa;                        
-                    }
-                } else if (operation == 'replace'){
-                    for (EntitlementPatchParser.Value userValue : memberList){
-                        //delete the current user's assignments
-						List<PermissionSetAssignment> assignedPS = [SELECT Id FROM PermissionSetAssignment where AssigneeId = :userValue.value and permissionSetId in (select id from PermissionSet where isOwnedByProfile = false)];
-                        delete assignedPS;
+			for (EntitlementPatchParser.Operations op : entitlementPP.operations){
+				String operation = op.op;
+                if (op.path != 'members'){
+		            res.statusCode = 400;
+		            res.responseBody = SCIMError.serializeError(res.statusCode, 'Can only patch members', req.headers.containsKey('X-Prettyprint'));
+		        	Database.rollback(sp);
+					return;
+				}
+
+	            if (entitlementType == 'profile'){
+	                if (operation == 'add'){
+	                    //not meaningful
+						ScimException scimEx = new ScimException('Cannot add a profile to an existing user');
+	                    scimEx.setStatusCode(400);
+	                    throw scimEx;
+	                } else if (operation == 'replace'){
+	                    for (EntitlementPatchParser.Value userValue : op.value){
+							User u = [select id from User where id = :userValue.value];
+	                        u.ProfileId = entitlementId;
+	                        update u;
+	                    }
+	                } else if (operation == 'remove'){
+	                    //not meaningful
+						ScimException scimEx = new ScimException('Cannot remove a profile from an existing user');
+	                    scimEx.setStatusCode(400);
+	                    throw scimEx;
+	                }
+	            } else if (entitlementType == 'permissionSet'){
+	                if (operation == 'add'){
+	                    for (EntitlementPatchParser.Value userValue : op.value){
+                            // avoid duplicate insertion errors
+							List<PermissionSetAssignment> existingPSAs = new List <PermissionSetAssignment>();
+                            existingPSAs = [SELECT Id FROM PermissionSetAssignment where AssigneeId = :userValue.value and permissionSetId = :entitlementId];
+                            if (existingPSAs.isEmpty()){
+                                PermissionSetAssignment newPsa = new PermissionSetAssignment();
+                                newPsa.assigneeId = userValue.value;
+                                newPsa.permissionSetId = entitlementId;
+                                insert newPsa;                                                                
+                            }
+	                    }
+	                } else if (operation == 'replace'){
+                        // this will replace the permSet assignments for the user
+                        // it will not replace the users in the permSet
+                        // which is to say, it will not remove all of the PermSet assignments and then add the mention users
+                        // it will simple remove all of the mention users PermSets and add the referenced one
+                        // consider changing or documenting
+	                    for (EntitlementPatchParser.Value userValue : op.value){
+	                        //delete the current users assignments
+							List<PermissionSetAssignment> assignedPS = [SELECT Id FROM PermissionSetAssignment where AssigneeId = :userValue.value and permissionSetId in (select id from PermissionSet where isOwnedByProfile = false)];
+	                        delete assignedPS;
                         
-                        //add the new value
-                        PermissionSetAssignment newPsa = new PermissionSetAssignment();
-                        newPsa.assigneeId = userValue.value;
-                        newPsa.permissionSetId = entitlementId;
-						System.debug('new permset: ' + newPSA);
-                        insert newPsa;                        
-                    }
-                } else if (operation == 'remove'){
-                    for (EntitlementPatchParser.Value userValue : memberList){
-                        //delete the current user's assignments
-						List<PermissionSetAssignment> assignedPS = [select id from PermissionSetAssignment where PermissionSetId = :entitlementId and AssigneeId = :userValue.value];
-                        delete assignedPS;
-                    }
-                }
-            }
-            
-        } catch (Exception e) {
+	                        //add the new value
+	                        PermissionSetAssignment newPsa = new PermissionSetAssignment();
+	                        newPsa.assigneeId = userValue.value;
+	                        newPsa.permissionSetId = entitlementId;
+							System.debug('new permset: ' + newPSA);
+	                        insert newPsa;                        
+	                    }
+	                } else if (operation == 'remove'){
+	                    for (EntitlementPatchParser.Value userValue : op.value){
+	                        //delete the current users assignments
+							List<PermissionSetAssignment> assignedPS = [select id from PermissionSetAssignment where PermissionSetId = :entitlementId and AssigneeId = :userValue.value];
+	                        delete assignedPS;
+	                    }
+	                }
+	            }	
+			}            
+        } catch (SCIMException e) {
             res.addHeader('Content-Type', 'application/json');
+            res.statusCode = e.getStatusCode();
             if (res.statusCode == null) {
                 res.statusCode = 500;
             } 
             res.responseBody = ScimError.serializeError(res.statusCode, e.getMessage(), req.headers.containsKey('X-Prettyprint'));
-            Database.rollback(sp);  
+			Database.rollback(sp);
+            return;
         }
 
         res.statusCode = 204;
@@ -411,5 +424,5 @@ global class EntitlementResource extends ScimResource {
             }            
             
         gen.writeEndObject();        
-}
+    }
 }

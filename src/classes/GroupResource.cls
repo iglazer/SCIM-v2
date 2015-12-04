@@ -66,6 +66,57 @@ global class GroupResource extends ScimResource {
             return;
         }
         
+        Savepoint sp = Database.setSavepoint();        
+		try {
+			for (GroupPatchParser.Operations op : groupPP.Operations){
+		        String operation = op.op;
+                System.debug('entering op loop for op: ' + operation);
+				if (op.path != 'members'){
+		            res.statusCode = 400;
+		            res.responseBody = SCIMError.serializeError(res.statusCode, 'Can only patch members', req.headers.containsKey('X-Prettyprint'));
+		        	Database.rollback(sp);
+					return;
+				}
+				
+				// if operation is replace, then remove all assignemnts and reassign via add
+				if (operation == 'replace'){
+                    List<GroupMember> groupMember = [Select Id from GroupMember where groupId = :groupId];
+                    if (!groupMember.isEmpty()) {
+                        Database.delete(groupMember, true);
+                    }                                    
+				} else if (operation == 'add' || operation == 'replace') {
+					for (GroupPatchParser.Value userId : op.value){
+	                    GroupMember newGroupMember = new GroupMember();
+	                    newGroupMember.GroupId = groupId;
+	                    newGroupMember.UserOrGroupId = userId.value;
+	                    insert newGroupMember;
+					}
+	                res.statusCode = 204;                            
+				} else if (operation == 'remove'){
+					List<GroupMember> groupMember = new List <GroupMember>();
+					for (GroupPatchParser.Value userId : op.value){
+						groupMember.add([Select Id from GroupMember where groupId = :groupId and UserOrGroupId = :userId.value]);
+					}
+                    if (!groupMember.isEmpty()) {
+                        Database.delete(groupMember, true);
+                    }   
+	                res.statusCode = 204;                                                             
+				} else {
+	                res.statusCode = 400;
+	                res.responseBody = SCIMError.serializeError(res.statusCode, 'Improper Operations', req.headers.containsKey('X-Prettyprint'));
+					return;
+	            }	
+			}
+		} catch (Exception e) {
+            res.addHeader('Content-Type', 'application/json');
+            if (res.statusCode == null) {
+                res.statusCode = 500;
+            } 
+            res.responseBody = ScimError.serializeError(res.statusCode, e.getMessage(), req.headers.containsKey('X-Prettyprint'));
+            Database.rollback(sp);  
+        }
+
+/*		
         List<String> usersToProcess = new List<String>();
         String operation = groupPP.Operations[0].op;
         if (groupPP.Operations[0].path != 'members'){
@@ -110,6 +161,8 @@ global class GroupResource extends ScimResource {
 				return;
             }
         }
+*/
+
         if (groupId != null) {
             // retrieve self
             doGet(groupId, null, false);
@@ -162,6 +215,7 @@ global class GroupResource extends ScimResource {
                 }
             }
             
+			// defuse v1 .delete here
             // The meta operations are per the spec
             // They are quite unrestful
             
