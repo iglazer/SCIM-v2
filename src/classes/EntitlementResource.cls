@@ -52,8 +52,6 @@ global class EntitlementResource extends ScimResource {
             res.responseBody = SCIMError.serializeError(res.statusCode, 'Improper Schema.', req.headers.containsKey('X-Prettyprint'));
             return;
         }
-
-//        List<EntitlementPatchParser.Value> memberList = entitlementPP.Operations[0].value;
         
         Savepoint sp = Database.setSavepoint();
         try {

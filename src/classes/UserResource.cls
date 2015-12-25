@@ -1368,19 +1368,110 @@ global with sharing class UserResource extends ScimResource {
     global static void doPatch() {
         RestRequest req = RestContext.request;
         RestResponse res = RestContext.response;
+        res.addHeader('Content-Type', 'application/json');    
+        res.statusCode = 201;
+        String error = '';
+
         String[] uriParts = req.requestURI.split('/',0);
-        Integer numParts = uriParts.size() - 1;
-           
+        Integer numParts = uriParts.size() - 1;           
         if (numParts >= 4) { 
             res.statusCode = 404;
             res.responseBody = SCIMError.serializeError(res.statusCode, 'No such resource', req.headers.containsKey('X-Prettyprint'));
             return;
-        }         
-        
-        User user = [ Select ID, Username, IsActive from User where Id = :uriParts[numParts]];
-        //doCreateOrUpdate(req, res, user, 'PATCH');
-        doPatch(req, res, user);
-    }
+        }                 
 
-   
+        User user = [ Select ID, Username, IsActive from User where Id = :uriParts[numParts]];
+		User tempUser = new User();
+        tempUser.id = user.Id;
+        //doCreateOrUpdate(req, res, user, 'PATCH');
+        // Old approach
+        //doPatch(req, res, user);
+        
+        SCIMPatchParser userPP = new SCIMPatchParser(req.requestBody.toString());
+        String schema = userPP.schemas.get(0);
+        if (!schema.equals('urn:ietf:params:scim:api:messages:2.0:PatchOp')){
+            res.statusCode = 400;
+            res.responseBody = SCIMError.serializeError(res.statusCode, 'Improper Schema.', req.headers.containsKey('X-Prettyprint'));
+            return;
+        }
+        
+        Savepoint sp = Database.setSavepoint();
+        try {
+			for (SCIMPatchParser.Operation op : userPP.operations){
+				String operation = op.op;
+
+                // givenName / firstName
+                if (op.path == ('givenName')){
+                    if (operation == 'remove'){
+                        tempUser.firstname = '';
+                    } else {
+                        tempUser.firstname = (String) op.value[0].get('value');                        
+                    } 
+                } else if (op.path == null){
+                    // in case there isnt a path check the values for the attr
+                    for (Map<String, Object> val : op.value){
+                        if (val.keySet().contains('givenName')){
+                            tempUser.firstname = (String) val.get('givenName');                        
+                        }
+                    } 
+                }
+
+                // familyname / lastName
+				if (op.path == 'familyName'){
+                    if (operation == 'remove'){
+                        tempUser.lastname = ''; // is this allowed?
+                    } else {
+                        tempUser.lastname = (String) op.value[0].get('value');                        
+                    } 
+                } else if (op.path == null){
+                    // in case there isnt a path check the values for the attr
+                    for (Map<String, Object> val : op.value){
+                        if (val.keySet().contains('familyName')){
+                            tempUser.lastname = (String) val.get('familyName');                        
+                        }
+                    }
+                }
+
+                // title
+                if (op.path == 'title'){
+                    if (operation == 'remove'){
+                        tempUser.title = '';
+                    } else {
+                        tempUser.title = (String) op.value[0].get('value');                        
+                    }
+                } else if (op.path == null){
+                    // in case there isnt a path check the values for the attr
+                    for (Map<String, Object> val : op.value){
+                        if (val.keySet().contains('title')){
+                            tempUser.title = (String) val.get('title');                        
+                        }
+                    }
+                }
+                
+                if (op.path != null) {
+
+                } else {
+                    String attrQueryStr = '';
+                    for (Map<String, Object> val : op.value){
+                        for (String keyVal : val.keySet()){
+                            System.debug('keySets: ' + keyVal);
+                            attrQueryStr = attrQueryStr + keyVal + ', ';
+                        }
+                    }
+//                    tempUser = Database.query('select id, ' + attrQueryStr.left(attrQueryStr.length() - 2) + ' FROM User WHERE id = \'' + user.id + '\' limit 1');
+                }
+                System.debug('User: ' + tempUser);
+                update tempUser;
+            }
+        } catch (SCIMException e) {
+            res.addHeader('Content-Type', 'application/json');
+            res.statusCode = e.getStatusCode();
+            if (res.statusCode == null) {
+                res.statusCode = 500;
+            } 
+            res.responseBody = ScimError.serializeError(res.statusCode, e.getMessage(), req.headers.containsKey('X-Prettyprint'));
+			Database.rollback(sp);
+            return;
+        }
+    }
 }
