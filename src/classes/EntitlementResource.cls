@@ -45,7 +45,7 @@ global class EntitlementResource extends ScimResource {
             return;
         }        
         
-        EntitlementPatchParser entitlementPP = EntitlementPatchParser.parse(req.requestBody.toString());
+        SCIMPatchParser entitlementPP = new SCIMPatchParser(req.requestBody.toString());
         String schema = entitlementPP.schemas.get(0);
         if (!schema.equals('urn:ietf:params:scim:api:messages:2.0:PatchOp')){
             res.statusCode = 400;
@@ -53,76 +53,84 @@ global class EntitlementResource extends ScimResource {
             return;
         }
 
-        List<EntitlementPatchParser.Value> memberList = entitlementPP.Operations[0].value;
+//        List<EntitlementPatchParser.Value> memberList = entitlementPP.Operations[0].value;
         
         Savepoint sp = Database.setSavepoint();
         try {
-			for (EntitlementPatchParser.Operations op : entitlementPP.operations){
+			for (SCIMPatchParser.Operation op : entitlementPP.operations){
 				String operation = op.op;
-                if (op.path != 'members'){
-		            res.statusCode = 400;
-		            res.responseBody = SCIMError.serializeError(res.statusCode, 'Can only patch members', req.headers.containsKey('X-Prettyprint'));
-		        	Database.rollback(sp);
-					return;
-				}
+                // Entitlement Patch expects either path=members
+                // or a value value of "members":"ID"
+                // everything else will not be parsed
+                
+                List<User> usersToBeProcessed = new List<User>();
+                for (Map<String, Object> val : op.value){
+                    User tempUser = new User();
+                    if ((op.path=='members') && (val.keySet().contains('value'))){
+                        tempUser.Id = (id)val.get('value');
+                    } else if (val.keySet().contains('members')){
+                        tempUser.Id = (id)val.get('members');                        
+                    }
+                    usersToBeProcessed.add(tempUser);
+                }
 
-	            if (entitlementType == 'profile'){
-	                if (operation == 'add'){
-	                    //not meaningful
-						ScimException scimEx = new ScimException('Cannot add a profile to an existing user');
-	                    scimEx.setStatusCode(400);
-	                    throw scimEx;
-	                } else if (operation == 'replace'){
-	                    for (EntitlementPatchParser.Value userValue : op.value){
-							User u = [select id from User where id = :userValue.value];
-	                        u.ProfileId = entitlementId;
-	                        update u;
-	                    }
-	                } else if (operation == 'remove'){
-	                    //not meaningful
-						ScimException scimEx = new ScimException('Cannot remove a profile from an existing user');
-	                    scimEx.setStatusCode(400);
-	                    throw scimEx;
-	                }
-	            } else if (entitlementType == 'permissionSet'){
-	                if (operation == 'add'){
-	                    for (EntitlementPatchParser.Value userValue : op.value){
-                            // avoid duplicate insertion errors
-							List<PermissionSetAssignment> existingPSAs = new List <PermissionSetAssignment>();
-                            existingPSAs = [SELECT Id FROM PermissionSetAssignment where AssigneeId = :userValue.value and permissionSetId = :entitlementId];
-                            if (existingPSAs.isEmpty()){
-                                PermissionSetAssignment newPsa = new PermissionSetAssignment();
-                                newPsa.assigneeId = userValue.value;
-                                newPsa.permissionSetId = entitlementId;
-                                insert newPsa;                                                                
+                for (User tempUser : usersToBeProcessed){
+                    User u = [select id, userRoleId from User where id = :tempUser.id limit 1];
+
+                    // process profile assignments
+                    if (entitlementType == 'profile'){
+                        if (operation == 'add'){
+                            //not meaningful
+                            ScimException scimEx = new ScimException('Cannot add a profile to an existing user');
+                            scimEx.setStatusCode(400);
+                            throw scimEx;
+                        } else if (operation == 'replace'){
+                                u.ProfileId = entitlementId;
+                                update u;
                             }
-	                    }
+                        } else if (operation == 'remove'){
+                            //not meaningful
+                            ScimException scimEx = new ScimException('Cannot remove a profile from an existing user');
+                            scimEx.setStatusCode(400);
+                            throw scimEx;
+                        }
+                    
+                // process permSet
+                if (entitlementType == 'permissionSet'){
+	                if (operation == 'add'){                        
+                        // avoid duplicate insertion errors
+                        List<PermissionSetAssignment> existingPSAs = new List <PermissionSetAssignment>();
+                        existingPSAs = [SELECT Id FROM PermissionSetAssignment where AssigneeId = :u.Id and permissionSetId = :entitlementId];
+                        if (existingPSAs.isEmpty()){
+                            PermissionSetAssignment newPsa = new PermissionSetAssignment();
+                            newPsa.assigneeId = u.Id;
+                            newPsa.permissionSetId = entitlementId;
+                            insert newPsa;                                                                
+                        }
 	                } else if (operation == 'replace'){
                         // this will replace the permSet assignments for the user
                         // it will not replace the users in the permSet
                         // which is to say, it will not remove all of the PermSet assignments and then add the mention users
-                        // it will simple remove all of the mention users PermSets and add the referenced one
+                        // it will simply remove all of the mention users PermSets and add the referenced one
                         // consider changing or documenting
-	                    for (EntitlementPatchParser.Value userValue : op.value){
-	                        //delete the current users assignments
-							List<PermissionSetAssignment> assignedPS = [SELECT Id FROM PermissionSetAssignment where AssigneeId = :userValue.value and permissionSetId in (select id from PermissionSet where isOwnedByProfile = false)];
-	                        delete assignedPS;
-                        
-	                        //add the new value
-	                        PermissionSetAssignment newPsa = new PermissionSetAssignment();
-	                        newPsa.assigneeId = userValue.value;
-	                        newPsa.permissionSetId = entitlementId;
-							System.debug('new permset: ' + newPSA);
-	                        insert newPsa;                        
-	                    }
+
+                        //delete the current users assignments
+                        List<PermissionSetAssignment> assignedPS = [SELECT Id FROM PermissionSetAssignment where AssigneeId = :u.Id and permissionSetId in (select id from PermissionSet where isOwnedByProfile = false)];
+                        delete assignedPS;
+                    
+                        //add the new value
+                        PermissionSetAssignment newPsa = new PermissionSetAssignment();
+                        newPsa.assigneeId = u.Id;
+                        newPsa.permissionSetId = entitlementId;
+                        System.debug('new permset: ' + newPSA);
+                        insert newPsa;                        
 	                } else if (operation == 'remove'){
-	                    for (EntitlementPatchParser.Value userValue : op.value){
-	                        //delete the current users assignments
-							List<PermissionSetAssignment> assignedPS = [select id from PermissionSetAssignment where PermissionSetId = :entitlementId and AssigneeId = :userValue.value];
-	                        delete assignedPS;
-	                    }
+                        //delete the current users assignments
+                        List<PermissionSetAssignment> assignedPS = [select id from PermissionSetAssignment where PermissionSetId = :entitlementId and AssigneeId = :u.Id];
+                        delete assignedPS;
 	                }
-	            }	
+	            }
+                }                   
 			}            
         } catch (SCIMException e) {
             res.addHeader('Content-Type', 'application/json');
@@ -142,93 +150,6 @@ global class EntitlementResource extends ScimResource {
         }
     }
     
-    public static Id doUpdatePermissionSet(String permsetId, System.JSONParser parser) {
-        List<Map<String,String>> members;
-        List<String> attributes;
-        String displayName;
-        
-        Savepoint sp = Database.setSavepoint();
-        try {
-            if (permsetId != null && [select id from PermissionSet where id = :permsetId].size() == 0) {
-                throw new ScimException('PermissionSet ' + permsetId + ' not found');
-            }
-        
-            while (parser.nextToken() != null) {
-                if (ScimResource.isNextTokenField(parser, 'members')) {    
-                    members = ScimResource.parseObjectArray('members', parser);                            
-                }
-                if (ScimResource.isNextTokenField(parser, 'displayName')) {    
-                    displayName = ScimResource.parseString('displayName', parser);                            
-                }
-                if (ScimResource.isNextTokenField(parser, 'meta')) {    
-                    while ((parser.nextToken() != null) && (parser.getCurrentToken() != JSONToken.END_OBJECT)) {
-                        if (parser.getCurrentToken() == JSONToken.FIELD_NAME) {
-                            String name = parser.getText();
-                            if ('attributes'.equals(name)) {
-                                attributes = ScimResource.parseStringArray('attributes', parser);
-                            }
-                        }                      
-                    }                     
-                }
-            }
-            
-            if (permsetId == null) {
-                throw new ScimException('No PermissionSet specified');
-            }
-            
-            // The meta operations are per the spec
-            // They are quite unrestful
-            
-            if (attributes != null) {
-                for (String attribute : attributes) {
-                    if ('members'.equals(attribute)) {
-                        // A meta attribute with an attributes array that contains a members value
-                        // Per spec this means removing all members
-                        List<PermissionSetAssignment> psas = [Select Id from PermissionSetAssignment where PermissionSetId = :permsetId];
-                        Database.delete(psas, true);
-                    }
-                }
-            } 
-            
-            if ( members != null ) {
-                for ( Map<String,String> member : members ) {
-                    String userId;
-                    if (member.containsKey('value')) userId = member.get('value');
-                    String operation = member.get('operation');
-                    if ('delete'.equals(operation)) {
-                        // delete if there
-                        List<PermissionSetAssignment> thisPsa = [Select Id from PermissionSetAssignment where PermissionSetId = :permsetId AND AssigneeId = :userId];
-                        if (!thisPsa.isEmpty()) {
-                            Database.delete(thisPsa, true);
-                        }                    
-                    }
-                    else {
-                        // add if not there
-                        if (userId != null) {
-                            List<PermissionSetAssignment> thisPsa = [Select Id from PermissionSetAssignment where PermissionSetId = :permsetId AND AssigneeId = :userId];
-                            if (thisPsa.isEmpty()) {
-                                PermissionSetAssignment newPsa = new PermissionSetAssignment();
-                                newPsa.assigneeId = userId;
-                                newPsa.permissionSetId = permsetId;
-                                insert newPsa;
-                            }
-                        } 
-                    }
-                }
-            }  
-            return permsetId;
-        }
-        catch (Exception e) {
-            RestRequest req = RestContext.request;
-            RestResponse res = RestContext.response;
-            res.addHeader('Content-Type', 'application/json');
-            res.statusCode = 500;
-            res.responseBody = ScimError.serializeError(res.statusCode, e.getMessage(), req.headers.containsKey('X-Prettyprint'));
-            Database.rollback(sp);  
-            return null;
-        }  
-    }    
-
     @HttpGet
     global static void doGet() {
         RestRequest req = RestContext.request;
