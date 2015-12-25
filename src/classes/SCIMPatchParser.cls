@@ -1,11 +1,11 @@
 public class SCIMPatchParser {
     public List<String> schemas;
 	public List<Operation> Operations;
-    
+
     public class Operation {
         public String op;
         public String path;
-        public Map<String, Object> value;
+        public List<Map<String, Object>> value;
     }    
     public SCIMPatchParser(String json){
         Map<String,Object> parsed = (Map<String, Object>)System.JSON.deserializeUntyped(json);
@@ -13,8 +13,7 @@ public class SCIMPatchParser {
         List<Object> operationsObj = (List<Object>)parsed.get('Operations');
 		
         schemas = new List<String>();
-        Operations = new List<Operation>();
-        
+        Operations = new List<Operation>();       
         for (Object val : schemasObj){
 			schemas.add((String) val);
         }
@@ -23,10 +22,10 @@ public class SCIMPatchParser {
             Operation tempOp = new Operation();
 			Map<String, Object> tempObj = (Map<String, Object>) val;
 			tempOp.op = (String)tempObj.get('op');
-			tempOp.value = new Map<String, Object>();
+			tempOp.value = new List<Map<String, Object>>();
             for (Object v : (List<Object>)tempObj.get('value')){
                 Map<String, Object> tempValues = (Map<String, Object>) v;
-                tempOp.value.putAll(tempValues);
+                tempOp.value.add(tempValues);
             }
             
             if (tempObj.get('path') != null){
