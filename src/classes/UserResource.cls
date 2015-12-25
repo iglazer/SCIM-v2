@@ -141,7 +141,9 @@ global with sharing class UserResource extends ScimResource {
     public String password {get;set;}
     public Map<String,Object> customFieldValues {get;set;}
     public Map<String,Object> externalUserProperties {get;set;}
-        
+
+    public List<Map<String, String>> operations {get;set;}
+    
     /**
      * Instantiate a UserResource with user provided blob content
      */
@@ -837,6 +839,26 @@ global with sharing class UserResource extends ScimResource {
         Database.rollback(sp);
     }
     
+    public static void doPatch(RestRequest req, RestResponse res, User u){
+        res.addHeader('Content-Type', 'application/json');    
+        res.statusCode = 201;
+        String error = '';
+        UserResource user;
+        Savepoint sp = Database.setSavepoint();
+        try {
+             user = new UserResource(req.requestBody);
+        } catch (ScimException scex) {
+            res.statusCode = scex.getStatusCode();
+            error = scex.getMessage();
+        } catch (Exception e) {
+            res.statusCode = 500;
+            error = e.getMessage();
+        }
+		
+
+        System.debug('Patched User: ' + user);
+    }
+    
     public static boolean isPortalType(String userType) {
         return portalUserTypes.contains(userType.toLowerCase());
     }  
@@ -1356,7 +1378,8 @@ global with sharing class UserResource extends ScimResource {
         }         
         
         User user = [ Select ID, Username, IsActive from User where Id = :uriParts[numParts]];
-        doCreateOrUpdate(req, res, user, 'PATCH'); 
+        //doCreateOrUpdate(req, res, user, 'PATCH');
+        doPatch(req, res, user);
     }
 
    

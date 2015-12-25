@@ -58,7 +58,7 @@ global class GroupResource extends ScimResource {
 		
         String groupId = uriParts[numParts];
 		GroupPatchParser groupPP = GroupPatchParser.parse(req.requestBody.toString());
-		
+        
         String schema = groupPP.schemas.get(0);
         if (!schema.equals('urn:ietf:params:scim:api:messages:2.0:PatchOp')){
             res.statusCode = 400;
