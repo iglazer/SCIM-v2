@@ -57,7 +57,7 @@ global class GroupResource extends ScimResource {
         }
 		
         String groupId = uriParts[numParts];
-		GroupPatchParser groupPP = GroupPatchParser.parse(req.requestBody.toString());
+		SCIMPatchParser groupPP = new SCIMPatchParser(req.requestBody.toString());
         
         String schema = groupPP.schemas.get(0);
         if (!schema.equals('urn:ietf:params:scim:api:messages:2.0:PatchOp')){
@@ -65,47 +65,64 @@ global class GroupResource extends ScimResource {
             res.responseBody = SCIMError.serializeError(res.statusCode, 'Improper Schema.', req.headers.containsKey('X-Prettyprint'));
             return;
         }
-        
+
         Savepoint sp = Database.setSavepoint();        
 		try {
-			for (GroupPatchParser.Operations op : groupPP.Operations){
+			for (SCIMPatchParser.Operation op : groupPP.Operations){
 		        String operation = op.op;
                 System.debug('entering op loop for op: ' + operation);
-				if (op.path != 'members'){
+                // Group Patch expects either path=members
+                // or a value value of "members":"ID"
+                // everything else will not be parsed
+/*
+                if (op.path != 'members'){
 		            res.statusCode = 400;
 		            res.responseBody = SCIMError.serializeError(res.statusCode, 'Can only patch members', req.headers.containsKey('X-Prettyprint'));
 		        	Database.rollback(sp);
 					return;
 				}
-				
+*/
+                // build list of member IDs
+                List<GroupMember> groupMembersToBeProcessed = new List<GroupMember>();
+                for (Map<String, Object> val : op.value){
+					GroupMember gm = new GroupMember();
+                    if (val.keySet().contains('value')){
+                        gm.UserOrGroupId = (Id)val.get('value');
+                        gm.GroupId = groupId;
+                    } else if (val.keySet().contains('members')) {
+                        gm.UserOrGroupId = (Id)val.get('members');
+                        gm.GroupId = groupId;						                        
+                    }
+                	groupMembersToBeProcessed.add(gm);
+                }
+                				
 				// if operation is replace, then remove all assignemnts and reassign via add
 				if (operation == 'replace'){
                     List<GroupMember> groupMember = [Select Id from GroupMember where groupId = :groupId];
                     if (!groupMember.isEmpty()) {
+                        System.debug('deleting following group member for replace: ' + groupMember);
                         Database.delete(groupMember, true);
                     }                                    
 				} else if (operation == 'add' || operation == 'replace') {
-					for (GroupPatchParser.Value userId : op.value){
-	                    GroupMember newGroupMember = new GroupMember();
-	                    newGroupMember.GroupId = groupId;
-	                    newGroupMember.UserOrGroupId = userId.value;
-	                    insert newGroupMember;
-					}
+					for (GroupMember member : groupMembersToBeProcessed){
+                        System.debug('added following member (add and replace): ' + member);
+                        insert member;
+                    }
 	                res.statusCode = 204;                            
 				} else if (operation == 'remove'){
-					List<GroupMember> groupMember = new List <GroupMember>();
-					for (GroupPatchParser.Value userId : op.value){
-						groupMember.add([Select Id from GroupMember where groupId = :groupId and UserOrGroupId = :userId.value]);
-					}
-                    if (!groupMember.isEmpty()) {
-                        Database.delete(groupMember, true);
-                    }   
+					for (GroupMember member : groupMembersToBeProcessed){
+                        System.debug('removed member: ' + member);
+                        GroupMember tempGM = new GroupMember();
+                        tempGM = [select Id from GroupMember where groupId = :member.GroupId and UserOrGroupId = :member.UserOrGroupId limit 1];
+                        Database.delete(tempGM, true);
+                    }                    
 	                res.statusCode = 204;                                                             
 				} else {
 	                res.statusCode = 400;
 	                res.responseBody = SCIMError.serializeError(res.statusCode, 'Improper Operations', req.headers.containsKey('X-Prettyprint'));
 					return;
 	            }	
+
 			}
 		} catch (Exception e) {
             res.addHeader('Content-Type', 'application/json');
@@ -115,53 +132,6 @@ global class GroupResource extends ScimResource {
             res.responseBody = ScimError.serializeError(res.statusCode, e.getMessage(), req.headers.containsKey('X-Prettyprint'));
             Database.rollback(sp);  
         }
-
-/*		
-        List<String> usersToProcess = new List<String>();
-        String operation = groupPP.Operations[0].op;
-        if (groupPP.Operations[0].path != 'members'){
-            res.statusCode = 400;
-            res.responseBody = SCIMError.serializeError(res.statusCode, 'Can only patch members', req.headers.containsKey('X-Prettyprint'));
-        	return;
-        }
-        List<GroupPatchParser.Value> values = groupPP.Operations[0].value;
-        for (GroupPatchParser.Value v : values){
-			usersToProcess.add(v.value);
-        }
-		
-        if (!usersToProcess.isEmpty()){
-            // if 'replace' clear the group assignments then add
-            if (operation == 'replace'){
-                for (String user : usersToProcess){
-                    List<GroupMember> groupMember = [Select Id from GroupMember where UserOrGroupId = :user];
-                    if (!groupMember.isEmpty()) {
-                        Database.delete(groupMember, true);
-                    }                                    
-                }                            
-            }
-            if (operation == 'add' || operation == 'replace') {
-                for (String user : usersToProcess){
-                    GroupMember newGroupMember = new GroupMember();
-                    newGroupMember.GroupId = groupId;
-                    newGroupMember.UserOrGroupId = user;
-                    insert newGroupMember;
-                }             
-                res.statusCode = 204;                            
-            } else if (operation == 'remove'){
-                for (String user : usersToProcess){
-                    List<GroupMember> groupMember = [Select Id from GroupMember where GroupId = :groupId AND UserOrGroupId = :user];
-                    if (!groupMember.isEmpty()) {
-                        Database.delete(groupMember, true);
-                    }                                    
-                }            
-                res.statusCode = 204;                            
-            } else {
-                res.statusCode = 400;
-                res.responseBody = SCIMError.serializeError(res.statusCode, 'Improper Operations', req.headers.containsKey('X-Prettyprint'));
-				return;
-            }
-        }
-*/
 
         if (groupId != null) {
             // retrieve self
