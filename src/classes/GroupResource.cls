@@ -74,25 +74,23 @@ global class GroupResource extends ScimResource {
                 // Group Patch expects either path=members
                 // or a value value of "members":"ID"
                 // everything else will not be parsed
-/*
-                if (op.path != 'members'){
-		            res.statusCode = 400;
-		            res.responseBody = SCIMError.serializeError(res.statusCode, 'Can only patch members', req.headers.containsKey('X-Prettyprint'));
-		        	Database.rollback(sp);
-					return;
-				}
-*/
+
                 // build list of member IDs
                 List<GroupMember> groupMembersToBeProcessed = new List<GroupMember>();
                 for (Map<String, Object> val : op.value){
 					GroupMember gm = new GroupMember();
-                    if (val.keySet().contains('value')){
+                    if ((op.path=='members') && (val.keySet().contains('value'))){
                         gm.UserOrGroupId = (Id)val.get('value');
                         gm.GroupId = groupId;
                     } else if (val.keySet().contains('members')) {
                         gm.UserOrGroupId = (Id)val.get('members');
                         gm.GroupId = groupId;						                        
-                    }
+                    }else {
+	 		            res.statusCode = 400;
+	 		            res.responseBody = SCIMError.serializeError(res.statusCode, 'Improper Operations', req.headers.containsKey('X-Prettyprint'));
+	 		            Database.rollback(sp);
+	   					return;
+	 		        }
                 	groupMembersToBeProcessed.add(gm);
                 }
                 				

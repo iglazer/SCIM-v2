@@ -69,7 +69,7 @@ global class RoleResource extends ScimResource {
         }
         
         String roleId = uriParts[numParts];
-		RolePatchParser rolePP = RolePatchParser.parse(req.requestBody.toString());
+		SCIMPatchParser rolePP = new SCIMPatchParser(req.requestBody.toString());
 		
         String schema = rolePP.schemas.get(0);
         if (!schema.equals('urn:ietf:params:scim:api:messages:2.0:PatchOp')){
@@ -78,23 +78,27 @@ global class RoleResource extends ScimResource {
             return;
         }
 
-//        List<String> usersToProcess = new List<String>();
-//        String userId = rolePP.Operations[0].value[0].value;
-//        User u = [select id, userRoleId from User where id = :userId];
-
         Savepoint sp = Database.setSavepoint();        
 		try {
-			for (RolePatchParser.Operations op : rolePP.Operations){
+			for (SCIMPatchParser.Operation op : rolePP.Operations){
 		        String operation = op.op;
-				if (op.path != 'members'){
-		            res.statusCode = 400;
-		            res.responseBody = SCIMError.serializeError(res.statusCode, 'Can only patch members', req.headers.containsKey('X-Prettyprint'));
-		        	Database.rollback(sp);
-					return;
-				}
-				
-				for (RolePatchParser.Value userId : op.value){
-					 User u = [select id, userRoleId from User where id = :userId.value];
+                // Role Patch expects either path=members
+                // or a value value of "members":"ID"
+                // everything else will not be parsed
+                
+                List<User> usersToBeProcessed = new List<User>();
+                for (Map<String, Object> val : op.value){
+                    User tempUser = new User();
+                    if ((op.path=='members') && (val.keySet().contains('value'))){
+                        tempUser.Id = (id)val.get('value');
+                    } else if (val.keySet().contains('members')){
+                        tempUser.Id = (id)val.get('members');                        
+                    }
+                    usersToBeProcessed.add(tempUser);
+                }
+                for (User tempUser : usersToBeProcessed){
+                    User u = [select id, userRoleId from User where id = :tempUser.id limit 1];
+                    
 	 		        if (operation == 'add'){
 	 		            if (u.userRoleId == null) {
 	 		                u.userRoleId = roleId;
