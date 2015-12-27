@@ -1234,6 +1234,13 @@ global with sharing class UserResource extends ScimResource {
 //        return java:common.udd.Udd.isValidId(id); JUST FOR IAN
 	return true;
     }
+
+    public static Map<String, String> setResponse (String errorType, String attrName, String errorString, String responseCode){
+		Map<String, String> response = new Map<String, String>();
+		response.put('statusCode', responseCode);
+        response.put('errorString', errorType + ' ' + attrName + ' ' + errorString);
+        return response;
+    }
     
     @HttpGet
     global static void doGet() {
@@ -1444,6 +1451,165 @@ global with sharing class UserResource extends ScimResource {
                     for (Map<String, Object> val : op.value){
                         if (val.keySet().contains('title')){
                             tempUser.title = (String) val.get('title');                        
+                        }
+                    }
+                }
+
+                // email
+                // this likely wont work if email is sent in the value
+                // and not via path
+                if (op.path == 'email'){
+                    if (operation == 'remove'){
+                        tempUser.email = '';
+                    } else {
+                        tempUser.email = (String) op.value[0].get('value');                        
+                    }
+                } else if (op.path == null){
+                    // in case there isnt a path check the values for the attr
+                    for (Map<String, Object> val : op.value){
+                        if (val.keySet().contains('email')){
+                            tempUser.email = (String) val.get('email');                        
+                        }
+                    }
+                }
+                
+                
+                // preferredLanguage / languagelocalekey
+                if (op.path == 'preferredLanguage'){
+                    if (operation == 'remove'){
+                        tempUser.languagelocalekey = '';
+                    } else {
+                        tempUser.languagelocalekey = (String) op.value[0].get('value');                        
+                    }
+                } else if (op.path == null){
+                    // in case there isnt a path check the values for the attr
+                    for (Map<String, Object> val : op.value){
+                        if (val.keySet().contains('preferredLanguage')){
+                            tempUser.languagelocalekey = (String) val.get('title');                        
+                        }
+                    }
+                }
+
+                // locale / localesidkey
+                if (op.path == 'locale'){
+                    if (operation == 'remove'){
+                        tempUser.localesidkey = '';
+                    } else {
+                        tempUser.localesidkey = (String) op.value[0].get('value');                        
+                    }
+                } else if (op.path == null){
+                    // in case there isnt a path check the values for the attr
+                    for (Map<String, Object> val : op.value){
+                        if (val.keySet().contains('locale')){
+                            tempUser.localesidkey = (String) val.get('locale');                        
+                        }
+                    }
+                }
+
+                // timezone / timezonesidkey
+                if (op.path == 'timezone'){
+                    if (operation == 'remove'){
+                        tempUser.timezonesidkey = '';
+                    } else {
+                        tempUser.timezonesidkey = (String) op.value[0].get('value');                        
+                    }
+                } else if (op.path == null){
+                    // in case there isnt a path check the values for the attr
+                    for (Map<String, Object> val : op.value){
+                        if (val.keySet().contains('timezone')){
+                            tempUser.timezonesidkey = (String) val.get('timezone');                        
+                        }
+                    }
+                }
+
+                // employeeNumber / employeeNumber
+                if (op.path == 'employeeNumber'){
+                    if (operation == 'remove'){
+                        tempUser.employeeNumber = '';
+                    } else {
+                        tempUser.employeeNumber = (String) op.value[0].get('value');                        
+                    }
+                } else if (op.path == null){
+                    // in case there isnt a path check the values for the attr
+                    for (Map<String, Object> val : op.value){
+                        if (val.keySet().contains('employeeNumber')){
+                            tempUser.employeeNumber = (String) val.get('employeeNumber');                        
+                        }
+                    }
+                }
+                
+                // division / division
+                if (op.path == 'division'){
+                    if (operation == 'remove'){
+                        tempUser.division = '';
+                    } else {
+                        tempUser.division = (String) op.value[0].get('value');                        
+                    }
+                } else if (op.path == null){
+                    // in case there isnt a path check the values for the attr
+                    for (Map<String, Object> val : op.value){
+                        if (val.keySet().contains('division')){
+                            tempUser.division = (String) val.get('division');                        
+                        }
+                    }
+                }
+
+                // department / department
+                if (op.path == 'department'){
+                    if (operation == 'remove'){
+                        tempUser.department = '';
+                    } else {
+                        tempUser.department = (String) op.value[0].get('value');                        
+                    }
+                } else if (op.path == null){
+                    // in case there isnt a path check the values for the attr
+                    for (Map<String, Object> val : op.value){
+                        if (val.keySet().contains('department')){
+                            tempUser.department = (String) val.get('department');                        
+                        }
+                    }
+                }
+                
+                // INVALID attributes - read only
+                // displayName, profileURL, photos, userType, id, formatted
+                if ((op.path == 'displayName') ||
+                    (op.path == 'profileURL') ||
+                    (op.path == 'photos') ||
+                    (op.path == 'userType') ||
+                    (op.path == 'id') ||                   
+                    (op.path == 'formatted')){
+                    error += 'INVALID:displayName_is_read_only;';  
+                    res.statusCode = 500;
+                } else if (op.path == null){
+                    // in case there isnt a path check the values for the attr
+                    for (Map<String, Object> val : op.value){
+                        if ((val.keySet().contains('displayName')) ||
+                            (val.keySet().contains('profileURL')) ||                            
+                            (val.keySet().contains('photos')) ||
+                            (val.keySet().contains('userType')) ||
+                            (op.path == 'id') ||                   
+                            (op.path == 'formatted'))                            
+                        {
+                            error += 'INVALID:displayName_is_read_only;';  
+                            res.statusCode = 500;
+                        }
+                    }
+                }
+                
+                
+                // UNSUPPORTED FIELDS
+                // middleName, honorificPrefix, honorificSuffix
+                if (op.path == 'middleName'){
+                    Map<String, String> responseCodeAndString = setResponse('UNSUPPORTED_FIELD','middleName','','500');
+                    error += responseCodeAndString.get('errorString');
+                    res.statusCode = Integer.valueOf(responseCodeAndString.get('statusCode'));
+                } else if (op.path == null){
+                    // in case there isnt a path check the values for the attr
+                    for (Map<String, Object> val : op.value){
+                        if (val.keySet().contains('middleName')){
+                            Map<String, String> responseCodeAndString = setResponse('UNSUPPORTED_FIELD','middleName','','500');
+                            error += responseCodeAndString.get('errorString');
+                            res.statusCode = Integer.valueOf(responseCodeAndString.get('statusCode'));
                         }
                     }
                 }

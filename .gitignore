@@ -7,3 +7,4 @@ Referenced Packages/*
 *.ConnectivityDevConfig
 
 *.schema
+/.DS_Store
