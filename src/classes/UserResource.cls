@@ -8,6 +8,10 @@ global with sharing class UserResource extends ScimResource {
     
     final private static Set<String> portalUserTypes = new Set<String>();
     
+    final public static Set<String> unsupportedAttrs = new Set<String>{'middlename', 'honorificPrefix', 'honorificSuffix'};
+    final public static Set<String> readOnlyAttrs = new Set<String>{'displayName', 'profileURL', 'photos', 'userType', 'id', 'formatted'};
+
+    
     static {
         portalUserTypes.add('cspliteportal');
         portalUserTypes.add('powercustomersuccess');
@@ -143,6 +147,8 @@ global with sharing class UserResource extends ScimResource {
     public Map<String,Object> externalUserProperties {get;set;}
 
     public List<Map<String, String>> operations {get;set;}
+    
+
     
     /**
      * Instantiate a UserResource with user provided blob content
@@ -1234,14 +1240,7 @@ global with sharing class UserResource extends ScimResource {
 //        return java:common.udd.Udd.isValidId(id); JUST FOR IAN
 	return true;
     }
-
-    public static Map<String, String> setResponse (String errorType, String attrName, String errorString, String responseCode){
-		Map<String, String> response = new Map<String, String>();
-		response.put('statusCode', responseCode);
-        response.put('errorString', errorType + ' ' + attrName + ' ' + errorString);
-        return response;
-    }
-    
+   
     @HttpGet
     global static void doGet() {
         RestResponse res = RestContext.response;
@@ -1370,6 +1369,30 @@ global with sharing class UserResource extends ScimResource {
              res.responseBody = ScimError.serializeError(res.statusCode, e.getMessage(), req.headers.containsKey('X-Prettyprint'));
         } 
     }
+   
+   public static Map<String, String> setResponse (String errorType, String attrName, String errorString, String responseCode){
+		Map<String, String> response = new Map<String, String>();
+		response.put('statusCode', responseCode);
+        response.put('errorString', errorType + ' ' + attrName + ' ' + errorString);
+        return response;
+    }
+ 
+
+    public static boolean isUnsupported (String attr) {
+		Boolean result = false;
+        if (unsupportedAttrs.contains(attr)) {
+            result = true;
+        }
+        return result;
+    }
+    
+    public static boolean isReadOnly (String attr) {
+		Boolean result = false;
+        if (readOnlyAttrs.contains(attr)) {
+            result = true;
+        }
+        return result;
+    }
     
     @HttpPatch
     global static void doPatch() {
@@ -1406,55 +1429,187 @@ global with sharing class UserResource extends ScimResource {
         try {
 			for (SCIMPatchParser.Operation op : userPP.operations){
 				String operation = op.op;
+				String path = op.path;
+				Set<String> values = new Set<String>();
 
-                // givenName / firstName
-                if (op.path == ('givenName')){
-                    if (operation == 'remove'){
-                        tempUser.firstname = '';
-                    } else {
-                        tempUser.firstname = (String) op.value[0].get('value');                        
-                    } 
-                } else if (op.path == null){
-                    // in case there isnt a path check the values for the attr
+                if (path == null) {
                     for (Map<String, Object> val : op.value){
-                        if (val.keySet().contains('givenName')){
-                            tempUser.firstname = (String) val.get('givenName');                        
-                        }
-                    } 
-                }
+                        for (String key : val.keySet()){
+							// check key for validity
+                            if ((!isUnsupported(key)) && (!isReadOnly(key))) {
+                                // key = givenName / firstName
+                                if ((key == 'givenName') && (operation == 'remove')) {
+                                    tempUser.firstname = null;
+                                } else if (key == 'givenName'){
+                                    tempUser.firstname = (String) val.get(key);
+                                }
 
-                // familyname / lastName
-				if (op.path == 'familyName'){
-                    if (operation == 'remove'){
-                        tempUser.lastname = ''; // is this allowed?
-                    } else {
-                        tempUser.lastname = (String) op.value[0].get('value');                        
-                    } 
-                } else if (op.path == null){
-                    // in case there isnt a path check the values for the attr
-                    for (Map<String, Object> val : op.value){
-                        if (val.keySet().contains('familyName')){
-                            tempUser.lastname = (String) val.get('familyName');                        
+                                // key = familyName / lastName
+                                if ((key == 'familyName') && (operation == 'remove')) {
+                                    tempUser.lastName = null;
+                                } else if (key == 'familyName'){
+                                    tempUser.lastName = (String) val.get(key);
+                                }
+                                
+                                // key = title / title
+                                if ((key == 'title') && (operation == 'remove')) {
+                                    tempUser.title = null;
+                                } else if (key == 'title'){
+                                    tempUser.title = (String) val.get(key);
+                                }
+
+                                // key = preferredLanguage / languagelocalekey
+                                if ((key == 'preferredLanguage') && (operation == 'remove')) {
+                                    tempUser.languagelocalekey = null;
+                                } else if (key == 'preferredLanguage'){
+                                    tempUser.languagelocalekey = (String) val.get(key);
+                                }
+
+                                // key = locale / localesidkey
+                                if ((key == 'locale') && (operation == 'remove')) {
+                                    tempUser.localesidkey = null;
+                                } else if (key == 'locale'){
+                                    tempUser.localesidkey = (String) val.get(key);
+                                }
+
+                                // key = timezone / timezonesidkey
+                                if ((key == 'timezone') && (operation == 'remove')) {
+                                    tempUser.timezonesidkey = null;
+                                } else if (key == 'timezone'){
+                                    tempUser.timezonesidkey = (String) val.get(key);
+                                }
+                                
+                                // key = employeeNumber / employeeNumber
+                                if ((key == 'employeeNumber') && (operation == 'remove')) {
+                                    tempUser.employeeNumber = null;
+                                } else if (key == 'employeeNumber'){
+                                    tempUser.employeeNumber = (String) val.get(key);
+                                }
+
+                                // key = division / division
+                                if ((key == 'division') && (operation == 'remove')) {
+                                    tempUser.division = null;
+                                } else if (key == 'division'){
+                                    tempUser.division = (String) val.get(key);
+                                }
+
+                                // key = department / department
+                                if ((key == 'department') && (operation == 'remove')) {
+                                    tempUser.department = null;
+                                } else if (key == 'department'){
+                                    tempUser.department = (String) val.get(key);
+                                }
+                                
+                            } else {
+                                if (isUnsupported(key)){
+                                    res.statusCode = 500;
+                                    error += 'UNSUPPORTED_FIELD: ' + key;
+                                    SCIMException e = new SCIMException();
+                                    e.setMessage(error);
+                                    e.setStatusCode(500);
+                                    throw e;
+                                }
+                                
+                                if (isReadOnly(key)){
+                                    res.statusCode = 500;
+                                    error += 'INVALID: ' + key + ' is read only';
+                                    SCIMException e = new SCIMException();
+                                    e.setMessage(error);
+                                    e.setStatusCode(500);
+                                    throw e;
+                                }
+
+                            }
                         }
                     }
-                }
-
-                // title
-                if (op.path == 'title'){
-                    if (operation == 'remove'){
-                        tempUser.title = '';
-                    } else {
-                        tempUser.title = (String) op.value[0].get('value');                        
-                    }
-                } else if (op.path == null){
-                    // in case there isnt a path check the values for the attr
-                    for (Map<String, Object> val : op.value){
-                        if (val.keySet().contains('title')){
-                            tempUser.title = (String) val.get('title');                        
+                } else {
+                    // check path for validity
+                    if ((!isUnsupported(path)) && (!isReadOnly(path))) {
+						// path = givenName / firstName
+                        if ((path == 'givenName') && (operation == 'remove')) {
+                            tempUser.firstname = null;
+                        } else if (path == 'givenName'){
+                            tempUser.firstname = (String) op.value[0].get('value');
                         }
+
+                        // familyName / lastName
+                        if ((path == 'familyName') && (operation == 'remove')) {
+                            tempUser.lastname = null;
+                        } else if (path == 'familyName'){
+                            tempUser.lastname = (String) op.value[0].get('value');
+                        }
+
+						// title
+                        if ((path == 'title') && (operation == 'remove')) {
+                            tempUser.title = null;
+                        } else if (path == 'title'){
+                            tempUser.title = (String) op.value[0].get('value');
+                        }
+                
+                        // preferredLanguage / languagelocalekey
+                        if ((path == 'preferredLanguage') && (operation == 'remove')) {
+                            tempUser.languagelocalekey = null;
+                        } else if (path == 'preferredLanguage'){
+                            tempUser.languagelocalekey = (String) op.value[0].get('value');
+                        }
+
+                        // locale / localesidkey
+                        if ((path == 'preferredLanguage') && (operation == 'remove')) {
+                            tempUser.localesidkey = null;
+                        } else if (path == 'preferredLanguage'){
+                            tempUser.localesidkey = (String) op.value[0].get('value');
+                        }
+
+                        // timezone / timezonesidkey
+                        if ((path == 'timezone') && (operation == 'remove')) {
+                            tempUser.timezonesidkey = null;
+                        } else if (path == 'timezone'){
+                            tempUser.timezonesidkey = (String) op.value[0].get('value');
+                        }
+
+                        // employeeNumber / employeeNumber
+                        if ((path == 'employeeNumber') && (operation == 'remove')) {
+                            tempUser.employeeNumber = null;
+                        } else if (path == 'employeeNumber'){
+                            tempUser.employeeNumber = (String) op.value[0].get('value');
+                        }
+
+                        // division / division
+                        if ((path == 'division') && (operation == 'remove')) {
+                            tempUser.division = null;
+                        } else if (path == 'division'){
+                            tempUser.division = (String) op.value[0].get('value');
+                        }
+
+                        // department / department
+                        if ((path == 'department') && (operation == 'remove')) {
+                            tempUser.department = null;
+                        } else if (path == 'department'){
+                            tempUser.department = (String) op.value[0].get('value');
+                        }
+                        
+                    } else {
+                        if (isUnsupported(path)){
+                            res.statusCode = 500;
+                            error += 'UNSUPPORTED_FIELD: ' + path;
+                            SCIMException e = new SCIMException();
+                            e.setMessage(error);
+                            e.setStatusCode(500);
+                            throw e;
+                        }
+                        
+                        if (isReadOnly(path)){
+                            res.statusCode = 500;
+                            error += 'INVALID: ' + path + ' is read only';
+                            SCIMException e = new SCIMException();
+                            e.setMessage(error);
+                            e.setStatusCode(500);
+                            throw e;
+                        }
+                        
                     }
                 }
-
+/*                
                 // email
                 // this likely wont work if email is sent in the value
                 // and not via path
@@ -1472,160 +1627,9 @@ global with sharing class UserResource extends ScimResource {
                         }
                     }
                 }
+*/                                
+                    //tempUser = Database.query('select id, ' + attrQueryStr.left(attrQueryStr.length() - 2) + ' FROM User WHERE id = \'' + user.id + '\' limit 1');
                 
-                
-                // preferredLanguage / languagelocalekey
-                if (op.path == 'preferredLanguage'){
-                    if (operation == 'remove'){
-                        tempUser.languagelocalekey = '';
-                    } else {
-                        tempUser.languagelocalekey = (String) op.value[0].get('value');                        
-                    }
-                } else if (op.path == null){
-                    // in case there isnt a path check the values for the attr
-                    for (Map<String, Object> val : op.value){
-                        if (val.keySet().contains('preferredLanguage')){
-                            tempUser.languagelocalekey = (String) val.get('title');                        
-                        }
-                    }
-                }
-
-                // locale / localesidkey
-                if (op.path == 'locale'){
-                    if (operation == 'remove'){
-                        tempUser.localesidkey = '';
-                    } else {
-                        tempUser.localesidkey = (String) op.value[0].get('value');                        
-                    }
-                } else if (op.path == null){
-                    // in case there isnt a path check the values for the attr
-                    for (Map<String, Object> val : op.value){
-                        if (val.keySet().contains('locale')){
-                            tempUser.localesidkey = (String) val.get('locale');                        
-                        }
-                    }
-                }
-
-                // timezone / timezonesidkey
-                if (op.path == 'timezone'){
-                    if (operation == 'remove'){
-                        tempUser.timezonesidkey = '';
-                    } else {
-                        tempUser.timezonesidkey = (String) op.value[0].get('value');                        
-                    }
-                } else if (op.path == null){
-                    // in case there isnt a path check the values for the attr
-                    for (Map<String, Object> val : op.value){
-                        if (val.keySet().contains('timezone')){
-                            tempUser.timezonesidkey = (String) val.get('timezone');                        
-                        }
-                    }
-                }
-
-                // employeeNumber / employeeNumber
-                if (op.path == 'employeeNumber'){
-                    if (operation == 'remove'){
-                        tempUser.employeeNumber = '';
-                    } else {
-                        tempUser.employeeNumber = (String) op.value[0].get('value');                        
-                    }
-                } else if (op.path == null){
-                    // in case there isnt a path check the values for the attr
-                    for (Map<String, Object> val : op.value){
-                        if (val.keySet().contains('employeeNumber')){
-                            tempUser.employeeNumber = (String) val.get('employeeNumber');                        
-                        }
-                    }
-                }
-                
-                // division / division
-                if (op.path == 'division'){
-                    if (operation == 'remove'){
-                        tempUser.division = '';
-                    } else {
-                        tempUser.division = (String) op.value[0].get('value');                        
-                    }
-                } else if (op.path == null){
-                    // in case there isnt a path check the values for the attr
-                    for (Map<String, Object> val : op.value){
-                        if (val.keySet().contains('division')){
-                            tempUser.division = (String) val.get('division');                        
-                        }
-                    }
-                }
-
-                // department / department
-                if (op.path == 'department'){
-                    if (operation == 'remove'){
-                        tempUser.department = '';
-                    } else {
-                        tempUser.department = (String) op.value[0].get('value');                        
-                    }
-                } else if (op.path == null){
-                    // in case there isnt a path check the values for the attr
-                    for (Map<String, Object> val : op.value){
-                        if (val.keySet().contains('department')){
-                            tempUser.department = (String) val.get('department');                        
-                        }
-                    }
-                }
-                
-                // INVALID attributes - read only
-                // displayName, profileURL, photos, userType, id, formatted
-                if ((op.path == 'displayName') ||
-                    (op.path == 'profileURL') ||
-                    (op.path == 'photos') ||
-                    (op.path == 'userType') ||
-                    (op.path == 'id') ||                   
-                    (op.path == 'formatted')){
-                    error += 'INVALID:displayName_is_read_only;';  
-                    res.statusCode = 500;
-                } else if (op.path == null){
-                    // in case there isnt a path check the values for the attr
-                    for (Map<String, Object> val : op.value){
-                        if ((val.keySet().contains('displayName')) ||
-                            (val.keySet().contains('profileURL')) ||                            
-                            (val.keySet().contains('photos')) ||
-                            (val.keySet().contains('userType')) ||
-                            (op.path == 'id') ||                   
-                            (op.path == 'formatted'))                            
-                        {
-                            error += 'INVALID:displayName_is_read_only;';  
-                            res.statusCode = 500;
-                        }
-                    }
-                }
-                
-                
-                // UNSUPPORTED FIELDS
-                // middleName, honorificPrefix, honorificSuffix
-                if (op.path == 'middleName'){
-                    Map<String, String> responseCodeAndString = setResponse('UNSUPPORTED_FIELD','middleName','','500');
-                    error += responseCodeAndString.get('errorString');
-                    res.statusCode = Integer.valueOf(responseCodeAndString.get('statusCode'));
-                } else if (op.path == null){
-                    // in case there isnt a path check the values for the attr
-                    for (Map<String, Object> val : op.value){
-                        if (val.keySet().contains('middleName')){
-                            Map<String, String> responseCodeAndString = setResponse('UNSUPPORTED_FIELD','middleName','','500');
-                            error += responseCodeAndString.get('errorString');
-                            res.statusCode = Integer.valueOf(responseCodeAndString.get('statusCode'));
-                        }
-                    }
-                }
-                
-                if (op.path != null) {
-
-                } else {
-                    String attrQueryStr = '';
-                    for (Map<String, Object> val : op.value){
-                        for (String keyVal : val.keySet()){
-                            System.debug('keySets: ' + keyVal);
-                            attrQueryStr = attrQueryStr + keyVal + ', ';
-                        }
-                    }
-//                    tempUser = Database.query('select id, ' + attrQueryStr.left(attrQueryStr.length() - 2) + ' FROM User WHERE id = \'' + user.id + '\' limit 1');
-                }
                 System.debug('User: ' + tempUser);
                 update tempUser;
             }
