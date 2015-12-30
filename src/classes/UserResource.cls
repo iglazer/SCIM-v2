@@ -8,8 +8,8 @@ global with sharing class UserResource extends ScimResource {
     
     final private static Set<String> portalUserTypes = new Set<String>();
     
-    final public static Set<String> unsupportedAttrs = new Set<String>{'middlename', 'honorificPrefix', 'honorificSuffix'};
-    final public static Set<String> readOnlyAttrs = new Set<String>{'displayName', 'profileURL', 'photos', 'userType', 'id', 'formatted'};
+    final public static Set<String> unsupportedAttrs = new Set<String>{'middlename', 'honorificPrefix', 'honorificSuffix', 'costCenter'};
+    final public static Set<String> readOnlyAttrs = new Set<String>{'displayName', 'profileURL', 'photos', 'userType', 'id', 'formatted', 'organization'};
 
     
     static {
@@ -1370,14 +1370,13 @@ global with sharing class UserResource extends ScimResource {
         } 
     }
    
-   public static Map<String, String> setResponse (String errorType, String attrName, String errorString, String responseCode){
+    public static Map<String, String> setResponse (String errorType, String attrName, String errorString, String responseCode){
 		Map<String, String> response = new Map<String, String>();
 		response.put('statusCode', responseCode);
         response.put('errorString', errorType + ' ' + attrName + ' ' + errorString);
         return response;
     }
  
-
     public static boolean isUnsupported (String attr) {
 		Boolean result = false;
         if (unsupportedAttrs.contains(attr)) {
@@ -1499,6 +1498,54 @@ global with sharing class UserResource extends ScimResource {
                                 } else if (key == 'department'){
                                     tempUser.department = (String) val.get(key);
                                 }
+
+                                // key = nickName / communityNickname
+                                if ((key == 'nickName') && (operation == 'remove')) {
+                                    tempUser.communityNickname = null;
+                                } else if (key == 'nickName'){
+                                    tempUser.communityNickname = (String) val.get(key);
+                                }
+
+                                // manager / managerId
+                                if ((key == 'manager') && (operation == 'remove')) {
+                                    tempUser.managerId = null;
+                                } else if (key == 'manager'){
+                                    tempUser.managerId = (Id) val.get(key);
+                                }
+        
+                                // delegatedApprover / delegatedApproverId
+                                if ((key == 'delegatedApprover') && (operation == 'remove')) {
+                                    tempUser.delegatedApproverId = null;
+                                } else if (key == 'delegatedApprover'){
+                                    tempUser.delegatedApproverId = (Id) val.get(key);
+                                }
+                                
+                                // active / isActive
+                                if ((key == 'active') && (operation == 'remove')) {
+                                    tempUser.isActive = false;
+                                } else if (key == 'active'){
+                                    tempUser.isActive = (Boolean) val.get(key);
+                                }
+
+                                // roles / userRoleId
+                                if ((key == 'roles') && (operation == 'remove')) {
+                                    tempUser.userRoleId = null;
+                                } else if (key == 'roles'){
+                                    Integer roleCount = 0;
+                                    List<String> roleIds = new List<String>();
+                                    for (Object roleId : (List<Object>) val.get(key)){
+                                        roleIds.add((String)roleId);
+                                        roleCount++;
+                                    }
+                                    if (roleCount != 1) {
+                                        error += 'INVALID:user_must_have_only_one_role;';  
+                                        res.statusCode = 500;
+                                        break;
+                                    } else {
+                                        tempUser.userRoleId = roleIds[0];
+                                    }
+                                }
+                                
                                 
                             } else {
                                 if (isUnsupported(key)){
@@ -1587,6 +1634,53 @@ global with sharing class UserResource extends ScimResource {
                         } else if (path == 'department'){
                             tempUser.department = (String) op.value[0].get('value');
                         }
+
+                        // nickName / communityNickname
+                        if ((path == 'nickName') && (operation == 'remove')) {
+                            tempUser.communityNickname = null;
+                        } else if (path == 'nickName'){
+                            tempUser.communityNickname = (String) op.value[0].get('value');
+                        }
+
+                        // manager / managerId
+                        if ((path == 'manager') && (operation == 'remove')) {
+                            tempUser.managerId = null;
+                        } else if (path == 'manager'){
+                            tempUser.managerId = (Id) op.value[0].get('value');
+                        }
+
+                        // delegatedApprover / delegatedApproverId
+                        if ((path == 'delegatedApprover') && (operation == 'remove')) {
+                            tempUser.delegatedApproverId = null;
+                        } else if (path == 'delegatedApprover'){
+                            tempUser.delegatedApproverId = (Id) op.value[0].get('value');
+                        }
+                        
+                        // active / isActive
+                        if ((path == 'active') && (operation == 'remove')) {
+                            tempUser.isActive = false;
+                        } else if (path == 'active'){
+                            tempUser.isActive = (Boolean) op.value[0].get('value');
+                        }
+
+                        // roles / userRoleId
+                        if ((path == 'roles') && (operation == 'remove')) {
+                            tempUser.userRoleId = null;
+                        } else if (path == 'roles'){
+                            Integer roleCount = 0;
+                            List<String> roleIds = new List<String>();
+                            for (Object roleId : (List<Object>) op.value[0].get('value')){
+                                roleIds.add((String)roleId);
+                                roleCount++;
+                            }
+                            if (roleCount != 1) {
+                                error += 'INVALID:user_must_have_only_one_role;';  
+                                res.statusCode = 500;
+                                break;
+                            } else {
+                                tempUser.userRoleId = roleIds[0];
+                            }
+                        }
                         
                     } else {
                         if (isUnsupported(path)){
@@ -1630,8 +1724,15 @@ global with sharing class UserResource extends ScimResource {
 */                                
                     //tempUser = Database.query('select id, ' + attrQueryStr.left(attrQueryStr.length() - 2) + ' FROM User WHERE id = \'' + user.id + '\' limit 1');
                 
-                System.debug('User: ' + tempUser);
-                update tempUser;
+                if (res.statusCode == 201){
+                    update tempUser;                    
+                } else {
+                    SCIMException e = new SCIMException();
+                    e.setMessage(error);
+					e.setStatusCode(res.statusCode);
+                    throw e;
+                }
+
             }
         } catch (SCIMException e) {
             res.addHeader('Content-Type', 'application/json');
