@@ -1546,7 +1546,7 @@ global with sharing class UserResource extends ScimResource {
                                     }
                                 }
                                 
-                                
+                                //TODO Add group support see PATH section
                             } else {
                                 if (isUnsupported(key)){
                                     res.statusCode = 500;
@@ -1573,16 +1573,16 @@ global with sharing class UserResource extends ScimResource {
                     // check path for validity
                     if ((!isUnsupported(path)) && (!isReadOnly(path))) {
 						// path = givenName / firstName
-                        if ((path == 'givenName') && (operation == 'remove')) {
+                        if (((path == 'givenName') || (path == 'name.givenName')) && (operation == 'remove')) {
                             tempUser.firstname = null;
-                        } else if (path == 'givenName'){
+                        } else if ((path == 'givenName') || (path == 'name.givenName')){
                             tempUser.firstname = (String) op.value[0].get('value');
                         }
 
                         // familyName / lastName
-                        if ((path == 'familyName') && (operation == 'remove')) {
+                        if (((path == 'givenName') || (path == 'name.familyName')) && (operation == 'remove')) {
                             tempUser.lastname = null;
-                        } else if (path == 'familyName'){
+                        } else if ((path == 'givenName') || (path == 'name.familyName')){
                             tempUser.lastname = (String) op.value[0].get('value');
                         }
 
@@ -1679,6 +1679,28 @@ global with sharing class UserResource extends ScimResource {
                                 break;
                             } else {
                                 tempUser.userRoleId = roleIds[0];
+                            }
+                        }
+
+                        if (path == 'groups') {
+                            List<GroupMember> groupsToProcess = new List<GroupMember>();
+                            if (op.value.size() != 0) {
+                                for (Map<String, Object> vals : (List<Map<String, Object>>) op.value){
+                                    GroupMember gm = new GroupMember();
+                                    gm.GroupId = (String) vals.get('value');
+                                    gm.UserOrGroupId = user.id;
+                                    groupsToProcess.add(gm);
+                                }
+                            } else {
+                                 groupsToProcess = [select id from GroupMember where userOrGroupId =: user.id];
+                            }
+                            if  ((operation == 'remove') || (operation == 'replace')) {
+                                // if replace then remove everything and add back what is specified
+                                List<GroupMember> currentGroups = [select id, groupId from GroupMember where userOrGroupId =: user.id];
+                                delete currentGroups;                                
+                            }
+                            if ((operation == 'add') || (operation == 'replace')){
+								insert groupsToProcess;
                             }
                         }
                         
