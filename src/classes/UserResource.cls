@@ -1546,7 +1546,31 @@ global with sharing class UserResource extends ScimResource {
                                     }
                                 }
                                 
-                                //TODO Add group support see PATH section
+                                // groups
+                                if (key == 'groups') {
+                                    List<GroupMember> groupsToProcess = new List<GroupMember>();
+									// there has got to be a better way to get the size here but object conversion was driving me crazy
+                                    List<Object> groupList = (List<Object>)val.get(key);                                    
+                                    if (groupList.size() != 0 ){
+                                        for (Object g : (List<Object>) val.get(key)){
+                                            Map<String, Object> tempGroupId = (Map<String, Object>) g;
+                                            GroupMember gm = new GroupMember();
+                                            gm.GroupId = (String) tempGroupId.get('id');
+                                            gm.UserOrGroupId = user.id;
+                                            groupsToProcess.add(gm);
+                                        }
+                                    } else {
+                                         groupsToProcess = [select id from GroupMember where userOrGroupId =: user.id];
+                                    }
+                                    if  ((operation == 'remove') || (operation == 'replace')) {
+                                        // if replace then remove everything and add back what is specified
+                                        List<GroupMember> currentGroups = [select id, groupId from GroupMember where userOrGroupId =: user.id];
+                                        delete currentGroups;                                
+                                    }
+                                    if ((operation == 'add') || (operation == 'replace')){
+                                        insert groupsToProcess;
+                                    }
+                                }
                             } else {
                                 if (isUnsupported(key)){
                                     res.statusCode = 500;
@@ -1664,12 +1688,13 @@ global with sharing class UserResource extends ScimResource {
                         }
 
                         // roles / userRoleId
+                        // roles to use id key
                         if ((path == 'roles') && (operation == 'remove')) {
                             tempUser.userRoleId = null;
                         } else if (path == 'roles'){
                             Integer roleCount = 0;
                             List<String> roleIds = new List<String>();
-                            for (Object roleId : (List<Object>) op.value[0].get('value')){
+                            for (Object roleId : (List<Object>) op.value[0].get('id')){
                                 roleIds.add((String)roleId);
                                 roleCount++;
                             }
@@ -1682,12 +1707,13 @@ global with sharing class UserResource extends ScimResource {
                             }
                         }
 
+                        // expects list of groups to use id key
                         if (path == 'groups') {
                             List<GroupMember> groupsToProcess = new List<GroupMember>();
                             if (op.value.size() != 0) {
                                 for (Map<String, Object> vals : (List<Map<String, Object>>) op.value){
                                     GroupMember gm = new GroupMember();
-                                    gm.GroupId = (String) vals.get('value');
+                                    gm.GroupId = (String) vals.get('id');
                                     gm.UserOrGroupId = user.id;
                                     groupsToProcess.add(gm);
                                 }
