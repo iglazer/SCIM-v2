@@ -1571,6 +1571,96 @@ global with sharing class UserResource extends ScimResource {
                                         insert groupsToProcess;
                                     }
                                 }
+                                
+                                // entitlements
+                                // expects list of entitlements to use id key
+                                if (key == 'entitlements'){
+                                  	if (operation == 'remove'){
+                                        // cannot remove all entitlements
+                                        // because you cannot remove profile
+                                        res.statusCode = 500;
+                                        error += 'INVALID: Cannot remove all entitlements. Use replace';
+                                        SCIMException e = new SCIMException();
+                                        e.setMessage(error);
+                                        e.setStatusCode(res.statusCode);
+                                        throw e;
+                                        
+                                    }
+                                    
+                                    List<String> profileToProcess = new List<String>();
+                                    List<PermissionSetAssignment> permSetsToProcess = new List<PermissionSetAssignment>();                            
+                                    String tempEntId;
+                                    
+                                    List<Object> entsList = (List<Object>)val.get(key);
+                                    if (entsList.size() != 0){
+                                        for (Object entIter : (List<Object>) val.get(key)){
+											Map<String, Object> tempEntObj = (Map<String, Object>) entIter;
+                                            tempEntId = (String) tempEntobj.get('id');
+                                            if (tempEntId.startsWith('00e')) {
+                                                profileToProcess.add(tempEntId);
+                                            } else if (tempEntId.startsWith('0PS')) {
+                                                PermissionSetAssignment psa = new PermissionSetAssignment();
+                                                psa.PermissionSetId = tempEntId;
+                                                psa.AssigneeId = user.id;
+                                                permSetsToProcess.add(psa);
+                                            } else {
+                                                //bad entitlement id
+                                                res.statusCode = 500;
+                                                error += 'INVALID entitlement id: ' + tempEntId;
+                                                SCIMException e = new SCIMException();
+                                                e.setMessage(error);
+                                                e.setStatusCode(res.statusCode);
+                                                throw e;
+                                            }
+                                        }
+                                    }
+                                    
+                                    if (operation == 'replace'){
+                                        if (profileToProcess.size() != 0){
+                                            if (profileToProcess.size() > 1){
+                                                // cannot have multiple profiles
+                                                res.statusCode = 500;
+                                                error += 'INVALID: cannot have multiple profiles: ' + profileToProcess;
+                                                SCIMException e = new SCIMException();
+                                                e.setMessage(error);
+                                                e.setStatusCode(res.statusCode);
+                                                throw e;
+                                            } else if (profileToProcess.size() == 1){
+                                                tempUser.ProfileId = profileToProcess[0];
+                                            }
+                                        }
+                                        if (permSetsToProcess.size() !=0){
+                                            // delete existing assignments
+                                            // then add new ones
+                                            List<PermissionSetAssignment> existingPSA = [select id from PermissionSetAssignment where assigneeId = :user.id AND PermissionSet.IsOwnedByProfile = False];
+                                            Database.delete(existingPSA);
+                                        }
+                                    }
+                                    
+                                    if ((operation == 'add') || (operation == 'replace')){
+                                        if ((profileToProcess.size() !=0) && (operation == 'add')){
+                                            // cannot have multiple profiles
+                                            res.statusCode = 500;
+                                            error += 'INVALID: cannot have multiple profiles: ' + profileToProcess;
+                                            SCIMException e = new SCIMException();
+                                            e.setMessage(error);
+                                            e.setStatusCode(res.statusCode);
+                                            throw e;
+                                        }
+                                        
+                                        // insert new permSets
+                                        Database.SaveResult[] newSRs = Database.insert(permSetsToProcess, false);
+                                        for (Database.SaveResult thisSR : newSRs) {
+                                            if (!thisSR.isSuccess()) {
+                                                for (Database.Error thisError : thisSR.getErrors()) {
+                                                    error += 'INVALID:' + thisError.getMessage() + ';';
+                                                }
+                                                res.statusCode = 400;
+                                            }
+                                        }      
+                                    }
+                                }
+                                
                             } else {
                                 if (isUnsupported(key)){
                                     res.statusCode = 500;
@@ -1733,7 +1823,6 @@ global with sharing class UserResource extends ScimResource {
                         
                         // entitlements
                         // expects list of entitlements to use id key
-                        // TODO add support for entitlements in key section
                         if (path == 'entitlements'){
                             List<String> profileToProcess = new List<String>();
                             List<PermissionSetAssignment> permSetsToProcess = new List<PermissionSetAssignment>();                            
@@ -1860,7 +1949,7 @@ global with sharing class UserResource extends ScimResource {
                     //tempUser = Database.query('select id, ' + attrQueryStr.left(attrQueryStr.length() - 2) + ' FROM User WHERE id = \'' + user.id + '\' limit 1');
                 
                 if (res.statusCode == 201){
-                    update tempUser;                    
+                    update tempUser;                
                 } else {
                     SCIMException e = new SCIMException();
                     e.setMessage(error);
@@ -1879,5 +1968,6 @@ global with sharing class UserResource extends ScimResource {
 			Database.rollback(sp);
             return;
         }
-    }
+        doGet(); 
+    }   
 }
