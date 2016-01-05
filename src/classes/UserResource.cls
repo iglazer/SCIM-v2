@@ -1707,6 +1707,7 @@ global with sharing class UserResource extends ScimResource {
                             }
                         }
 
+                        // groups
                         // expects list of groups to use id key
                         if (path == 'groups') {
                             List<GroupMember> groupsToProcess = new List<GroupMember>();
@@ -1727,6 +1728,92 @@ global with sharing class UserResource extends ScimResource {
                             }
                             if ((operation == 'add') || (operation == 'replace')){
 								insert groupsToProcess;
+                            }
+                        }
+                        
+                        // entitlements
+                        // expects list of entitlements to use id key
+                        // TODO add support for entitlements in key section
+                        if (path == 'entitlements'){
+                            List<String> profileToProcess = new List<String>();
+                            List<PermissionSetAssignment> permSetsToProcess = new List<PermissionSetAssignment>();                            
+                            String tempEntId;
+                            if (operation == 'remove'){
+                                // cannot remove all entitlements
+                                // because you cannot remove profile
+                                res.statusCode = 500;
+                                error += 'INVALID: Cannot remove all entitlements. Use replace';
+                                SCIMException e = new SCIMException();
+                                e.setMessage(error);
+                                e.setStatusCode(res.statusCode);
+                                throw e;
+                                
+                            }
+                            if (op.value.size() != 0) {
+                                for (Map<String, Object> vals : (List<Map<String, Object>>) op.value){
+                                    tempEntId = (String) vals.get('id');
+                                    if (tempEntId.startsWith('00e')) {
+                                        profileToProcess.add(tempEntId);
+                                    } else if (tempEntId.startsWith('0PS')) {
+                                        PermissionSetAssignment psa = new PermissionSetAssignment();
+                                        psa.PermissionSetId = tempEntId;
+                                        psa.AssigneeId = user.id;
+                                        permSetsToProcess.add(psa);
+                                    } else {
+                                        //bad entitlement id
+                                        res.statusCode = 500;
+                                        error += 'INVALID entitlement id: ' + tempEntId;
+                                        SCIMException e = new SCIMException();
+                                        e.setMessage(error);
+                                        e.setStatusCode(res.statusCode);
+                                        throw e;
+                                    }
+                                }
+                            }
+                            
+                            if (operation == 'replace'){
+                                if (profileToProcess.size() != 0){
+                                    if (profileToProcess.size() > 1){
+                                        // cannot have multiple profiles
+                                        res.statusCode = 500;
+                                        error += 'INVALID: cannot have multiple profiles: ' + profileToProcess;
+                                        SCIMException e = new SCIMException();
+                                        e.setMessage(error);
+                                        e.setStatusCode(res.statusCode);
+                                        throw e;
+                                    } else if (profileToProcess.size() == 1){
+                                        tempUser.ProfileId = profileToProcess[0];
+                                    }
+                                }
+                                if (permSetsToProcess.size() !=0){
+                                    // delete existing assignments
+                                    // then add new ones
+                                    List<PermissionSetAssignment> existingPSA = [select id from PermissionSetAssignment where assigneeId = :user.id AND PermissionSet.IsOwnedByProfile = False];
+                                    Database.delete(existingPSA);
+                                }
+                            }
+                            
+                            if ((operation == 'add') || (operation == 'replace')){
+                                if ((profileToProcess.size() !=0) && (operation == 'add')){
+                                    // cannot have multiple profiles
+                                    res.statusCode = 500;
+                                    error += 'INVALID: cannot have multiple profiles: ' + profileToProcess;
+                                    SCIMException e = new SCIMException();
+                                    e.setMessage(error);
+                                    e.setStatusCode(res.statusCode);
+                                    throw e;
+                                }
+								
+                                // insert new permSets
+                                Database.SaveResult[] newSRs = Database.insert(permSetsToProcess, false);
+                                for (Database.SaveResult thisSR : newSRs) {
+                                    if (!thisSR.isSuccess()) {
+                                        for (Database.Error thisError : thisSR.getErrors()) {
+                                            error += 'INVALID:' + thisError.getMessage() + ';';
+                                        }
+                                        res.statusCode = 400;
+                                    }
+                                }      
                             }
                         }
                         
