@@ -1,4 +1,4 @@
-@RestResource(urlMapping='/v2/Schemas/*')
+@RestResource(urlMapping='/scim/v2/Schemas/*')
 global class SchemasResource {
     
     @HttpGet

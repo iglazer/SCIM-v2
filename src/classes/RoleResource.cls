@@ -1,4 +1,4 @@
-@RestResource(urlMapping='/v2/Roles/*')
+@RestResource(urlMapping='/scim/v2/Roles/*')
 global class RoleResource extends ScimResource {
 	
 	// TODO method for iterating users to remove Role assignments probably can be optimized

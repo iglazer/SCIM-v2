@@ -1,4 +1,4 @@
-@RestResource(urlMapping='/v2/ResourceTypes')
+@RestResource(urlMapping='/scim/v2/ResourceTypes')
 global class ResourceTypeResource {
     
     @HttpGet

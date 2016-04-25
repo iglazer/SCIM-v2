@@ -1,4 +1,4 @@
-@RestResource(urlMapping='/v2')
+@RestResource(urlMapping='/scim/v2')
 global class RootResource {
     
     @HttpGet
@@ -15,12 +15,12 @@ global class RootResource {
     public static Blob serializeConfigs(boolean prettyPrint) {
         JSONGenerator gen = JSON.createGenerator(prettyPrint);
         gen.writeStartObject();
-            gen.writeStringField('Users', '/services/apexrest/v2/Users');                       
-            gen.writeStringField('Groups', '/services/apexrest/v2/Groups');
-            gen.writeStringField('Roles', '/services/apexrest/v2/Roles');        
-            gen.writeStringField('Entitlements', '/services/apexrest/v2/Entitlements');   
-            gen.writeStringField('ServiceProviderConfigs', '/services/apexrest/v2/ServiceProviderConfigs');                      
-            gen.writeStringField('Schemas', '/services/apexrest/v2/Schemas');   
+            gen.writeStringField('Users', '/services/apexrest/scim/v2/Users');                       
+            gen.writeStringField('Groups', '/services/apexrest/scim/v2/Groups');
+            gen.writeStringField('Roles', '/services/apexrest/scim/v2/Roles');        
+            gen.writeStringField('Entitlements', '/services/apexrest/scim/v2/Entitlements');   
+            gen.writeStringField('ServiceProviderConfigs', '/services/apexrest/scim/v2/ServiceProviderConfigs');                      
+            gen.writeStringField('Schemas', '/services/apexrest/scim/v2/Schemas');   
         gen.writeEndObject();
         return Blob.valueOf(gen.getAsString());
     }

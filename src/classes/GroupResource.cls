@@ -1,4 +1,4 @@
-@RestResource(urlMapping='/v2/Groups/*')
+@RestResource(urlMapping='/scim/v2/Groups/*')
 global class GroupResource extends ScimResource {
 
     @HttpDelete

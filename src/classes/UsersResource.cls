@@ -1,4 +1,4 @@
-@RestResource(urlMapping='/v2/Users')
+@RestResource(urlMapping='/scim/v2/Users')
 global class UsersResource extends ScimResource {
 
     private static Blob serializeUsers(List<User> users, Integer total, String startIndex, String count, String attributes, String host, boolean prettyPrint) {

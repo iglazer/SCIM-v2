@@ -1,4 +1,4 @@
-@RestResource(urlMapping='/v2/Roles')
+@RestResource(urlMapping='/scim/v2/Roles')
 global class RolesResource {
 
     final public static Map<String, ScimSoqlAttributeProcessor> scimNameToRoleSObjectNameMap;

@@ -1,4 +1,4 @@
-@RestResource(urlMapping='/v2/ServiceProviderConfig')
+@RestResource(urlMapping='/scim/v2/ServiceProviderConfig')
 global class ServiceProviderConfigsResource {
     
     @HttpGet

@@ -1,4 +1,4 @@
-@RestResource(urlMapping='/v2/Entitlements')
+@RestResource(urlMapping='/scim/v2/Entitlements')
 global class EntitlementsResource {
 
     final public static Map<String, ScimSoqlAttributeProcessor> scimNameToProfileSObjectNameMap;

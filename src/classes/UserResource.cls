@@ -1,4 +1,4 @@
-@RestResource(urlMapping='/v2/Users/*')
+@RestResource(urlMapping='/scim/v2/Users/*')
 global with sharing class UserResource extends ScimResource {
     final public static Map<String, ScimSoqlAttributeProcessor> scimNameToUserSObjectNameMap;
     final private static Map<String, Schema.SOAPType> customFieldToSoapTypeMap;
@@ -825,7 +825,7 @@ global with sharing class UserResource extends ScimResource {
                 if (!users.isEmpty()) {
                     // active could be set to false in which case will not return.
                     User uNew = users.get(0);
-                    res.addHeader('Location', 'https://' + req.headers.get('Host') + '/services/apexrest/v2/Users/' + uNew.Id);    
+                    res.addHeader('Location', 'https://' + req.headers.get('Host') + '/services/apexrest/scim/v2/Users/' + uNew.Id);    
                     res.responseBody = UserResource.serializeUser(uNew,req.headers.get('Host'),req.headers.containsKey('X-Prettyprint'));
                 }
                 
@@ -884,7 +884,7 @@ global with sharing class UserResource extends ScimResource {
         	res.statusCode = 200;
         } else {
         	res.statusCode = 404;
-			res.responseBody = SCIMError.serializeError(res.statusCode, 'Resource https://' + host + '/services/apexrest/v2/Users/' + uriParts[numParts] + ' not found', req.headers.containsKey('X-Prettyprint'));
+			res.responseBody = SCIMError.serializeError(res.statusCode, 'Resource https://' + host + '/services/apexrest/scim/v2/Users/' + uriParts[numParts] + ' not found', req.headers.containsKey('X-Prettyprint'));
         }
     }  
     
@@ -1225,7 +1225,7 @@ global with sharing class UserResource extends ScimResource {
                             
                             String base = URL.getSalesforceBaseUrl().toExternalForm();
                             
-                            String path = '/services/apexrest/v2/Users/' + user.id;
+                            String path = '/services/apexrest/scim/v2/Users/' + user.id;
                             gen.writeStringField('location', base + path);
                             
                             Blob digest = Crypto.generateDigest('SHA-1',  Blob.valueOf(user.id + lastmodFormated));
@@ -1250,7 +1250,9 @@ global with sharing class UserResource extends ScimResource {
             res.addHeader('Content-Type', 'application/json');
             String[] uriParts = req.requestURI.split('/',0);
             Integer numParts = uriParts.size() - 1;
-            if (numParts >= 4) { 
+                       
+            
+            if (numParts >= 5) { // had to increase this is 5 because changed service url
                 res.statusCode = 404;
                 res.responseBody = SCIMError.serializeError(res.statusCode, 'No such resource', req.headers.containsKey('X-Prettyprint'));
             } else {
@@ -1261,19 +1263,25 @@ global with sharing class UserResource extends ScimResource {
                     attributes = attributes.replaceAll(' ', '');
                 }
                 
-                if(isValidId(uriParts[numParts])){
-                    String soql = FilterTranslator.buildAttributeQueryString(attributes, 'id eq \"' + uriParts[numParts] + '\"', null, null, scimNameToUserSObjectNameMap, 'User',  'isActive = true', null, null).getActualQuery();
+                if(isValidId(uriParts[numParts]) || uriParts[numParts] == 'Me'){
+                	String userId;
+                	if (uriParts[numParts] == 'Me'){
+                		userId = UserInfo.getUserId();
+                	} else {
+                		userId = uriParts[numParts];
+                	}
+                    String soql = FilterTranslator.buildAttributeQueryString(attributes, 'id eq \"' + userId + '\"', null, null, scimNameToUserSObjectNameMap, 'User',  'isActive = true', null, null).getActualQuery();
                     users = Database.query(soql);
     
                     if ( !users .isEmpty()  ) {
-                        res.addHeader('Location', 'https://' + host + '/services/scim/v2/Users/' + users.get(0).Id);   
+                        res.addHeader('Location', 'https://' + host + '/services/apexrest/scim/v2/Users/' + users.get(0).Id);   
                         res.statusCode = 200; 
                         res.responseBody = UserResource.serializeUser(users.get(0),attributes,host,req.headers.containsKey('X-Prettyprint'));
                     } else {
                         res.statusCode = 404;
-                        res.responseBody = SCIMError.serializeError(res.statusCode, 'Resource https://' + host + '/services/apexrest/v2/Users/' + uriParts[numParts] + ' not found', req.headers.containsKey('X-Prettyprint'));
+                        res.responseBody = SCIMError.serializeError(res.statusCode, 'Resource https://' + host + '/services/apexrest/scim/v2/Users/' + uriParts[numParts] + ' not found', req.headers.containsKey('X-Prettyprint'));
                     }
-                }else{
+                } else {
                     res.statusCode = 404;
                     res.responseBody = SCIMError.serializeError(res.statusCode, 'Invalid Id', req.headers.containsKey('X-Prettyprint'));
                 }
@@ -1362,7 +1370,7 @@ global with sharing class UserResource extends ScimResource {
                 doCreateOrUpdate(req, res, user, 'PUT'); 
             } else {
                 res.statusCode = 404;
-                res.responseBody = ScimError.serializeError(res.statusCode, 'Resource https://' + req.headers.get('Host') + '/services/apexrest/v2/Users/' + uriParts[numParts] + ' not found', req.headers.containsKey('X-Prettyprint'));
+                res.responseBody = ScimError.serializeError(res.statusCode, 'Resource https://' + req.headers.get('Host') + '/services/apexrest/scim/v2/Users/' + uriParts[numParts] + ' not found', req.headers.containsKey('X-Prettyprint'));
             } 
         } catch ( Exception e ) {
              res.statusCode = 404;

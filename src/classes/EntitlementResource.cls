@@ -1,4 +1,4 @@
-@RestResource(urlMapping='/v2/Entitlements/*')
+@RestResource(urlMapping='/scim/v2/Entitlements/*')
 global class EntitlementResource extends ScimResource {
     
 	@HttpPut   
@@ -314,7 +314,7 @@ global class EntitlementResource extends ScimResource {
                             gen.writeStartObject();
                                 gen.writeStringField('value', userId);
                                 gen.writeStringField('display', user.getName());
-                            	gen.writeStringField('$ref', base + '/services/apexrest/v2/Users/' + userId);
+                            	gen.writeStringField('$ref', base + '/services/apexrest/scim/v2/Users/' + userId);
                             gen.writeEndObject();        
                         }
                     }
