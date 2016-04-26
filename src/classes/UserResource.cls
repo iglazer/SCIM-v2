@@ -881,7 +881,7 @@ global with sharing class UserResource extends ScimResource {
 //            User[] userRefedBy = Database.query('select id from user where id=\'' + uriParts[numParts] + '\'');
         	u[0].isActive = false;
         	update u[0];
-        	res.statusCode = 200;
+        	res.statusCode = 204;
         } else {
         	res.statusCode = 404;
 			res.responseBody = SCIMError.serializeError(res.statusCode, 'Resource https://' + host + '/services/apexrest/scim/v2/Users/' + uriParts[numParts] + ' not found', req.headers.containsKey('X-Prettyprint'));
