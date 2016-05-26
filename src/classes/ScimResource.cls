@@ -64,7 +64,7 @@ global abstract with sharing class ScimResource {
             
         }
         return objs;
-    }	
+    }
     
     public static Map<String,String> parseSimpleObject(String context, System.JSONParser parser) {
         Map<String,String> obj = new Map<String,String>();
@@ -132,6 +132,14 @@ global abstract with sharing class ScimResource {
         } else {
             List<String> attributeList = attributes.split(',');
             for (String thisAttribute : attributeList) {
+                
+                //check for extended and custom schema
+                if (attributeName.contains(':')){
+                    if(thisAttribute.contains(attributeName)){
+                        should = true;
+                        break;
+                    }
+                }
             
                 List<String> renderingAttributeParts = attributeName.split('\\.');
                 List<String> thisAttributeParts = thisAttribute.split('\\.');

@@ -5,8 +5,9 @@ public class ScimError {
             gen.writeFieldName('Errors');
             gen.writeStartArray();
                 gen.writeStartObject();
-                    gen.writeStringField('description', e);
-                    gen.writeNumberField('code', statusCode);
+        		gen.writeStringField('schemas', '["urn:ietf:params:scim:api:messages:2.0:Error"]');
+                    gen.writeStringField('detail', e);
+                    gen.writeNumberField('status', statusCode);
                 gen.writeEndObject();
             gen.writeEndArray();
         gen.writeEndObject();

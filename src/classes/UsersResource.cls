@@ -56,7 +56,7 @@ global class UsersResource extends ScimResource {
             if (attributes != null) {
                 attributes = attributes.replaceAll(' ', '');
             } else {
-            	attributes = 'id,meta';
+//            	attributes = 'id,meta';
             }
 
             QueryHolder queryHolder = FilterTranslator.buildAttributeQueryString(attributes, filter, startIndex, count, UserResource.scimNameToUserSObjectNameMap, 'User',  'isActive = true', null, null);
@@ -65,6 +65,19 @@ global class UsersResource extends ScimResource {
         	
             if (!users.isEmpty()) {
                 res.responseBody = serializeUsers(users, total, startIndex, count, attributes, host, req.headers.containsKey('X-Prettyprint'));        
+            } else {
+                res.statusCode = 200;
+                JSONGenerator gen = JSON.createGenerator(true);
+                gen.writeStartObject();
+                    gen.writeNumberField('totalResults', 0);
+                    gen.writeNumberField('itemsPerPage', 0);                
+                    gen.writeNumberField('startIndex', 0);
+                    gen.writeFieldName('schemas');
+                    gen.writeStartArray();
+                        gen.writeString('urn:ietf:params:scim:api:messages:2.0:ListResponse');
+                    gen.writeEndArray();
+                gen.writeEndObject();
+                res.responseBody = Blob.valueOf(gen.getAsString());
             }
         }
         catch (Exception ex) {

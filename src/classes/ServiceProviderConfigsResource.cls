@@ -1,4 +1,4 @@
-@RestResource(urlMapping='/scim/v2/ServiceProviderConfig')
+@RestResource(urlMapping='/scim/v2/ServiceProviderConfig/*')
 global class ServiceProviderConfigsResource {
     
     @HttpGet
@@ -65,8 +65,7 @@ global class ServiceProviderConfigsResource {
                     gen.writeStringField('name', 'OAuth v2.0');                       
                     gen.writeStringField('description', 'Authentication Scheme using the OAuth Standard');   
                     gen.writeStringField('specUrl', 'http://tools.ietf.org/html/rfc6749');                                         
-                    gen.writeStringField('documentationUrl', 'https://help.salesforce.com/apex/HTViewHelpDoc?id=remoteaccess_authenticate.htm');                      
-                    gen.writeStringField('type', 'oauth2');   
+                    gen.writeStringField('documentationUrl', 'https://help.salesforce.com/apex/HTViewHelpDoc?id=remoteaccess_authenticate.htm');                         
                     gen.writeBooleanField('primary', true); 
                 gen.writeEndObject();
              gen.writeEndArray();  
@@ -75,10 +74,11 @@ global class ServiceProviderConfigsResource {
         gen.writeFieldName('meta');
             gen.writeStartObject();
                 String base = URL.getSalesforceBaseUrl().toExternalForm();               
-                String path = '/services/apexrest/v2/ServiceProviderConfig/';
+                String path = '/services/apexrest/scim/v2/ServiceProviderConfig/';
         		String fullPath = base + path;
                 gen.writeStringField('location', fullPath);
-  
+
+        		gen.writeStringField('resourceType', 'ServiceProviderConfig'); 
                 
                 Blob digest = Crypto.generateDigest('SHA-1',  Blob.valueOf(fullPath));
                 gen.writeStringField('version', EncodingUtil.convertToHex(digest));

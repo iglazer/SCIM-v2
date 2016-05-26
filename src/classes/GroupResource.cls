@@ -293,7 +293,9 @@ global class GroupResource extends ScimResource {
                             String base = URL.getSalesforceBaseUrl().toExternalForm();
                             String path = '/services/apexrest/v2/Groups/' + g.id;
                             gen.writeStringField('location', base + path);
-                            
+
+                    		gen.writeStringField('resourceType', 'Group');                    
+                    
                             Blob digest = Crypto.generateDigest('SHA-1',  Blob.valueOf(user.id + lastmodFormated));
                             gen.writeStringField('version', EncodingUtil.convertToHex(digest));                                        
                         gen.writeEndObject();
@@ -387,11 +389,13 @@ global class GroupResource extends ScimResource {
         
         String[] uriParts = req.requestURI.split('/',0);
         Integer numParts = uriParts.size() - 1;   
-        if (numParts >= 4) { 
+        if (numParts > 4) { 
             res.statusCode = 404;
             res.responseBody = SCIMError.serializeError(res.statusCode, 'No such resource.', req.headers.containsKey('X-Prettyprint'));
-        } else {
+        } else if (numParts == 4) {
             doGet(uriParts[numParts], attributes, false);   
+        } else if (numParts == 3) {
+            GroupsResource.doGet();
         }
     }
 }

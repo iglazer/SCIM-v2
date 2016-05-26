@@ -174,13 +174,19 @@ public class FilterTranslator {
     public static QueryHolder buildAttributeQueryString(String attributes, String filter, String startIndex, String count, Map<String, ScimSoqlAttributeProcessor> scimNameToSObjectNameMap, String table, String extraClause, String limitOverride, String offsetOverride) {
         Set<String> uniqueSObjectFieldNames = new Set<String>();
         String soql = 'select ';
-        
+        for (String k : scimNameToSObjectNameMap.keySet()){
+            System.debug(k);
+        }
         if (attributes != null) {
             String[] attrs = attributes.split(',');
             for (String attr : attrs) {
+                // hack to avoid organization from entering the query string
+                if(attr == 'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:organization') {
+                    break;
+                }
                 ScimSoqlAttributeProcessor attrProcessor = scimNameToSObjectNameMap.get(attr); 
                 if (attrProcessor == null) {
-                    throw new IllegalFilterEXception('Unsupported attribute :' + attr);
+                    throw new IllegalFilterEXception('Unsupported attribute: ' + attr);
                 }
                 String name = attrProcessor.getSoqlAttribute();
                 if (name != null) {
@@ -192,7 +198,7 @@ public class FilterTranslator {
             for (String key : scimNameToSObjectNameMap.keyset()) {
             ScimSoqlAttributeProcessor attrProcessor = scimNameToSObjectNameMap.get(key);
             String name = attrProcessor.getSoqlAttribute();
-                if (name != null) {
+                if ((name != null) && (name != 'organization')) {
                     uniqueSObjectFieldNames.addAll(attrProcessor.getSoqlAttributeList());
                 }
             }
@@ -229,7 +235,7 @@ public class FilterTranslator {
         soql += ' ORDER BY ID ';
         
         String noPagingSoql = soql;
-        
+
         Integer lim = NULL;
         if (limitOverride != NULL) {
             soql += ' LIMIT ' + limitOverride;
@@ -257,7 +263,6 @@ public class FilterTranslator {
                 soql += ' OFFSET ' + offset;
             }
         }
-        
         return new QueryHolder(countSoql, soql, noPagingSoql, lim, offset);
     }
     

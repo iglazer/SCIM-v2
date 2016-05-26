@@ -1,5 +1,12 @@
 @RestResource(urlMapping='/scim/v2/Schemas/*')
 global class SchemasResource {
+    private static Boolean doUser = true;
+    private static Boolean doGroup = true;
+    private static Boolean doEntitlement = true;
+    private static Boolean doRole = true;
+    private static Boolean doEnterprise = true;
+    private static Boolean doExternal = true;
+    private static Boolean doOrgCustom = true;
     
     @HttpGet
     global static void doGet() {
@@ -7,1114 +14,1104 @@ global class SchemasResource {
         RestResponse res = RestContext.response;
         String[] uriParts = req.requestURI.split('/',0);
         Integer numParts = uriParts.size() - 1;  
-		String schemaType = uriParts[numParts];
-		Boolean doUser = true;
-		Boolean doGroup = true;
-		Boolean doEntitlement = true;
-		Boolean doRole = true;
-        if (schemaType.equalsIgnoreCase('urn:ietf:params:scim:schemas:core:2.0:User') || schemaType.equalsIgnoreCase('Users')) {
+        String schemaType = uriParts[numParts];
+        
+        if (schemaType.equalsIgnoreCase('urn:ietf:params:scim:schemas:core:2.0:User') || schemaType.equalsIgnoreCase('User')) {
             doGroup = false;
             doEntitlement = false;
             doRole = false;
-        } else if (schemaType.equalsIgnoreCase('urn:ietf:params:scim:schemas:core:2.0:Group') || schemaType.equalsIgnoreCase('Groups')) {
+            doEnterprise = false;
+            doExternal = false;
+            doOrgCustom = false;
+        } else if (schemaType.equalsIgnoreCase('urn:ietf:params:scim:schemas:core:2.0:Group') || schemaType.equalsIgnoreCase('Group')) {
             doUser = false;
             doEntitlement = false;
             doRole = false;            
-        } else if (schemaType.equalsIgnoreCase('urn:salesforce:schemas:extension:1.0:Entitlement') || schemaType.equalsIgnoreCase('Entitlements')) {
+            doEnterprise = false;
+            doExternal = false;
+            doOrgCustom = false;
+        } else if (schemaType.equalsIgnoreCase('urn:salesforce:schemas:extension:1.0:Entitlement') || schemaType.equalsIgnoreCase('Entitlement')) {
             doUser = false;
             doGroup = false;
             doRole = false;            
-        } else if (schemaType.equalsIgnoreCase('urn:salesforce:schemas:extension:1.0:Role') || schemaType.equalsIgnoreCase('Roles')) {
+            doEnterprise = false;
+            doExternal = false;
+            doOrgCustom = false;
+        } else if (schemaType.equalsIgnoreCase('urn:salesforce:schemas:extension:1.0:Role') || schemaType.equalsIgnoreCase('Role')) {
             doUser = false;
             doGroup = false;
             doEntitlement = false;            
+            doEnterprise = false;
+            doExternal = false;
+            doOrgCustom = false;
+        } else if (schemaType.equalsIgnoreCase('urn:ietf:params:scim:schemas:extension:enterprise:2.0:User')){
+            doUser = false;
+            doGroup = false;
+            doEntitlement = false;            
+            doRole = false;
+            doExternal = false;
+            doOrgCustom = false;
+        } else if (schemaType.equalsIgnoreCase('urn:salesforce:schemas:extension:external:1.0')){
+            doUser = false;
+            doGroup = false;
+            doEntitlement = false;            
+            doEnterprise = false;
+            doRole = false;
+            doOrgCustom = false;
+        } else if (schemaType.equalsIgnoreCase('urn:salesforce:schemas:extension:' + UserInfo.getOrganizationId())){
+            doUser = false;
+            doGroup = false;
+            doEntitlement = false;            
+            doEnterprise = false;
+            doRole = false;
+            doExternal = false;
         }
+        
+                                           
         res.addHeader('Content-Type', 'application/json');
         res.statusCode = 200; 
-        res.responseBody = serializeSchemas(req.headers.containsKey('X-Prettyprint'), doUser, doGroup, doEntitlement, doRole);
+        res.responseBody = serializeSchemas(req.headers.containsKey('X-Prettyprint'));
 
     }  
     
-    private static String serializeUserSchema(boolean prettyPrint){
-        JSONGenerator gen = JSON.createGenerator(prettyPrint);
-        
-        return gen.getAsString();
-    }
-    
-    private static Blob serializeSchemas(boolean prettyPrint, Boolean doUser, Boolean doGroup, Boolean doEntitlement, Boolean doRole) {
-        Integer totalResults = 4;
+    private static Blob serializeSchemas(boolean prettyPrint) {
+
+        Integer totalResults = 7;
 
         if (!doUser) totalResults--;
         if (!doGroup) totalResults--;
         if (!doEntitlement) totalResults--;
         if (!doRole) totalResults--;
+        if (!doEnterprise) totalResults--;
+        if (!doExternal) totalResults--;
+        if (!doOrgCustom) totalResults--;
+        
+        String base = URL.getSalesforceBaseUrl().toExternalForm();               
+        String path = '/services/apexrest/scim/v2/';
+        String fullPath = base + path;
         
         JSONGenerator gen = JSON.createGenerator(prettyPrint);
-        	gen.writeStartObject();
-        		gen.writeStringField('totalResults', totalResults.format());
-        		gen.writeStringField('itemsPerPage', totalResults.format());
-        		gen.writeStringField('startIndex', '1');
-        		gen.writeFieldName('schemas');
-        		gen.writeStartArray();
-        			gen.writeString('urn:ietf:params:scim:api:messages:2.0:ListResponse');
-        		gen.writeEndArray();
-        		gen.writeFieldName('Resources');
-        			gen.writeStartArray();
-
+        gen.writeStartObject();
+        if (totalResults > 1){
+            gen.writeStringField('totalResults', totalResults.format());
+            gen.writeStringField('itemsPerPage', totalResults.format());
+            gen.writeStringField('startIndex', '1');
+            gen.writeFieldName('schemas');
+                gen.writeStartArray();
+                gen.writeString('urn:ietf:params:scim:api:messages:2.0:ListResponse');
+                gen.writeEndArray();
+            gen.writeFieldName('Resources');
+                gen.writeStartArray();            
+        }
+        
         if (doUser){
-        			gen.writeStartObject();
-                    gen.writeStringField('id', 'urn:ietf:params:scim:schemas:core:2.0:User'); 
-                    gen.writeStringField('name', 'User');   
-                    gen.writeStringField('description', 'SCIM core resource for representing users');                            
-                    gen.writeFieldName('attributes');
+            System.debug('in doUser');
+            if (totalResults > 1){
+                gen.writeStartObject();
+            }
+
+            gen.writeStringField('id', 'urn:ietf:params:scim:schemas:core:2.0:User'); 
+            gen.writeStringField('name', 'User');   
+            gen.writeStringField('description', 'SCIM core resource for representing users');                            
+            gen.writeFieldName('attributes');
+            gen.writeStartArray();
+                //ID
+                gen.writeStartObject();
+                    gen.writeStringField('name', 'id');                       
+                    gen.writeStringField('type', 'string');   
+                    gen.writeBooleanField('multiValued', false); 
+                    gen.writeStringField('description', 'Unique identifier for the SCIM resource as defined by the Service Provider.');   
+                    gen.writeStringField('mutability', 'readOnly');                             
+                    gen.writeBooleanField('required', false);                             
+                    gen.writeBooleanField('caseExact', false); 
+                    gen.writeStringField('uniqueness', 'server');                             
+                gen.writeEndObject();
+              //externalId
+                gen.writeStartObject();
+                    gen.writeStringField('name', 'externalId');                       
+                    gen.writeStringField('type', 'string');   
+                    gen.writeBooleanField('multiValued', false); 
+                    gen.writeStringField('description', 'Unique identifier for the Resource as defined by the Service Consumer');
+            gen.writeStringField('mutability', 'readWrite');                            
+                    gen.writeBooleanField('required', false); 
+                    gen.writeBooleanField('caseExact', true); 
+                gen.writeEndObject();
+                //userName
+                gen.writeStartObject();
+                    gen.writeStringField('name', 'userName');                       
+                    gen.writeStringField('type', 'string');   
+                    gen.writeBooleanField('multiValued', false); 
+                    gen.writeStringField('description', 'Unique identifier for the User'); 
+            gen.writeStringField('mutability', 'readWrite');                            
+                    gen.writeBooleanField('required', true); 
+                    gen.writeBooleanField('caseExact', false); 
+                gen.writeEndObject();
+                //name
+                gen.writeStartObject();
+                    gen.writeStringField('name', 'name');                       
+                    gen.writeStringField('type', 'complex');   
+                    gen.writeBooleanField('multiValued', false); 
+                    gen.writeStringField('description', 'The components of the Users real name');                   
+                    gen.writeStringField('mutability', 'readWrite');                            
+                    gen.writeBooleanField('required', false);                             
+                    gen.writeBooleanField('caseExact', false); 
+                    gen.writeFieldName('subAttributes');
                     gen.writeStartArray();
-                        //ID
                         gen.writeStartObject();
-                            gen.writeStringField('name', 'id');                       
+                            gen.writeStringField('name', 'formatted');                       
                             gen.writeStringField('type', 'string');   
-                            gen.writeBooleanField('multiValued', false); 
-                            gen.writeStringField('description', 'Unique identifier for the SCIM resource as defined by the Service Provider.');   
+                            gen.writeStringField('description', 'The full name formatted for display');                   
                             gen.writeStringField('mutability', 'readOnly');                             
                             gen.writeBooleanField('required', false);                             
                             gen.writeBooleanField('caseExact', false); 
-                            gen.writeStringField('uniqueness', 'server');                             
-                        gen.writeEndObject();
-                        /*
-                        //meta
-                        gen.writeStartObject();
-                            gen.writeStringField('name', 'meta');                       
-                            gen.writeStringField('type', 'complex');   
-                            gen.writeBooleanField('multiValued', false); 
-                            gen.writeStringField('description', 'A complex type containing metadata about the resource');                       
-                            gen.writeStringField('mutability', 'readWrite');                            
-                            gen.writeBooleanField('required', false);                             
-                            gen.writeBooleanField('caseExact', false); 
-                            gen.writeFieldName('subAttributes');
-                            gen.writeStartArray();
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'created');                       
-                                    gen.writeStringField('type', 'datetime');   
-                                    gen.writeStringField('description', 'The DateTime the Resource was added to the Service Provider');           
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'lastModified');                       
-                                    gen.writeStringField('type', 'datetime');   
-                                    gen.writeStringField('description', 'The most recent DateTime the details of this Resource were updated at the Service Provider');                   
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'version');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The version of the Resource being returned');                   
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();   
-                            gen.writeEndArray();
-                        gen.writeEndObject();
-                        */
-                        //externalId
-                        gen.writeStartObject();
-                            gen.writeStringField('name', 'externalId');                       
-                            gen.writeStringField('type', 'string');   
-                            gen.writeBooleanField('multiValued', false); 
-                            gen.writeStringField('description', 'Unique identifier for the Resource as defined by the Service Consumer');                                     gen.writeStringField('mutability', 'readWrite');                            
-                            gen.writeBooleanField('required', false); 
-                            gen.writeBooleanField('caseExact', true); 
-                        gen.writeEndObject();
-                        //userName
-                        gen.writeStartObject();
-                            gen.writeStringField('name', 'userName');                       
-                            gen.writeStringField('type', 'string');   
-                            gen.writeBooleanField('multiValued', false); 
-                            gen.writeStringField('description', 'Unique identifier for the User');                                     							gen.writeStringField('mutability', 'readWrite');                            
-                            gen.writeBooleanField('required', false); 
-                            gen.writeBooleanField('caseExact', false); 
-                        gen.writeEndObject();
-                        //name
-                        gen.writeStartObject();
-                            gen.writeStringField('name', 'name');                       
-                            gen.writeStringField('type', 'complex');   
-                            gen.writeBooleanField('multiValued', false); 
-                            gen.writeStringField('description', 'The components of the Users real name');                   
-                            gen.writeStringField('mutability', 'readWrite');                            
-                            gen.writeBooleanField('required', false);                             
-                            gen.writeBooleanField('caseExact', false); 
-                            gen.writeFieldName('subAttributes');
-                            gen.writeStartArray();
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'formatted');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The full name formatted for display');                   
-                                    gen.writeStringField('mutability', 'readOnly');                             
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'familyName');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The family name (lastName) of the User');                   
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'middleName');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The middleName of the User');                   
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'givenName');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The givenName of the user');                   
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();   
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'honorificPrefix');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The honorific prefix(es) of the User');                   
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'honorificSuffix');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The honorific suffix(es) of the User');                   
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                            gen.writeEndArray();
-                        gen.writeEndObject();
-                        //displayName
-                        gen.writeStartObject();
-                            gen.writeStringField('name', 'displayName');                       
-                            gen.writeStringField('type', 'string');   
-                            gen.writeBooleanField('multiValued', false); 
-                            gen.writeStringField('description', 'The name of the User, suitable for display');                   
-        
-                            gen.writeStringField('mutability', 'readWrite');                            
-                            gen.writeBooleanField('required', false); 
-                            gen.writeBooleanField('caseExact', false); 
-                        gen.writeEndObject();
-                        //nickName
-                        gen.writeStartObject();
-                            gen.writeStringField('name', 'nickName');                       
-                            gen.writeStringField('type', 'string');   
-                            gen.writeBooleanField('multiValued', false); 
-                            gen.writeStringField('description', 'The casual way to address the user in real life');                   
-        
-                            gen.writeStringField('mutability', 'readWrite');                            
-                            gen.writeBooleanField('required', false); 
-                            gen.writeBooleanField('caseExact', false); 
-                        gen.writeEndObject();
-                        //profileUrl
-                        gen.writeStartObject();
-                            gen.writeStringField('name', 'profileUrl');                       
-                            gen.writeStringField('type', 'string');   
-                            gen.writeBooleanField('multiValued', false); 
-                            gen.writeStringField('description', 'URL to a page representing the User online');                   
-        
-                            gen.writeStringField('mutability', 'readWrite');                            
-                            gen.writeBooleanField('required', false); 
-                            gen.writeBooleanField('caseExact', false); 
-                        gen.writeEndObject();
-                        //title
-                        gen.writeStartObject();
-                            gen.writeStringField('name', 'title');                       
-                            gen.writeStringField('type', 'string');   
-                            gen.writeBooleanField('multiValued', false); 
-                            gen.writeStringField('description', 'The Users title, such as Vice President');                   
-        
-                            gen.writeStringField('mutability', 'readWrite');                            
-                            gen.writeBooleanField('required', false); 
-                            gen.writeBooleanField('caseExact', false); 
-                        gen.writeEndObject();
-                        //userType
-                        gen.writeStartObject();
-                            gen.writeStringField('name', 'userType');                       
-                            gen.writeStringField('type', 'string');   
-                            gen.writeBooleanField('multiValued', false); 
-                            gen.writeStringField('description', 'The organization-to-user relationship');                   
-        
-                            gen.writeStringField('mutability', 'readWrite');                            
-                            gen.writeBooleanField('required', false); 
-                            gen.writeBooleanField('caseExact', false); 
-                        gen.writeEndObject();
-                        //preferredLanguage
-                        gen.writeStartObject();
-                            gen.writeStringField('name', 'preferredLanguage');                       
-                            gen.writeStringField('type', 'string');   
-                            gen.writeBooleanField('multiValued', false); 
-                            gen.writeStringField('description', 'The Users preferred written or spoken language. Generally used for selecting a localized User interface.  Valid values are concatenation of the ISO 639-1 two letter language code, an underscore, and the ISO 3166-1 2 letter country code; e.g., en_US specifies the language English and country US');                   
-        
-                            gen.writeStringField('mutability', 'readWrite');                            
-                            gen.writeBooleanField('required', false); 
-                            gen.writeBooleanField('caseExact', false); 
-                        gen.writeEndObject();
-                        //locale
-                        gen.writeStartObject();
-                            gen.writeStringField('name', 'locale');                       
-                            gen.writeStringField('type', 'string');   
-                            gen.writeBooleanField('multiValued', false); 
-                            gen.writeStringField('description', 'Used to indicate the Users default location for purposes of localizing items such as currency, date time format, numerical representations, etc. A locale value is a concatenation of the ISO 639-1 two letter language code an underscore, and the ISO 3166-1 2 letter country code; e.g., en_US specifies the language English  and country US');                   
-        
-                            gen.writeStringField('mutability', 'readWrite');                            
-                            gen.writeBooleanField('required', false); 
-                            gen.writeBooleanField('caseExact', false); 
-                        gen.writeEndObject();
-                        //timezone
-                        gen.writeStartObject();
-                            gen.writeStringField('name', 'timezone');                       
-                            gen.writeStringField('type', 'string');   
-                            gen.writeBooleanField('multiValued', false); 
-                            gen.writeStringField('description', 'The Users time zone in the Olson timezone database format;  e.g., America/Los_Angeles');                   
-        
-                            gen.writeStringField('mutability', 'readWrite');                            
-                            gen.writeBooleanField('required', false); 
-                            gen.writeBooleanField('caseExact', false); 
-                        gen.writeEndObject();
-                        //displayName
-                        gen.writeStartObject();
-                            gen.writeStringField('name', 'active');                       
-                            gen.writeStringField('type', 'boolean');   
-                            gen.writeBooleanField('multiValued', false); 
-                            gen.writeStringField('description', 'A Boolean value indicating the Users status');                   
-        
-                            gen.writeStringField('mutability', 'readWrite');                            
-                            gen.writeBooleanField('required', false); 
-                            gen.writeBooleanField('caseExact', false); 
-                        gen.writeEndObject();
-                        //password
-                        gen.writeStartObject();
-                            gen.writeStringField('name', 'password');                       
-                            gen.writeStringField('type', 'string');   
-                            gen.writeBooleanField('multiValued', false); 
-                            gen.writeStringField('description', 'Password of the user');                      
-                            gen.writeStringField('mutability', 'writeOnly');                            
-                            gen.writeBooleanField('required', false);                             
-                        gen.writeEndObject();
-        
-                        //emails
-                        gen.writeStartObject();
-                            gen.writeStringField('name', 'emails');                       
-                            gen.writeStringField('type', 'complex');   
-                            gen.writeBooleanField('multiValued', false); 
-                            gen.writeStringField('description', 'email address for the User');                   
-        
-                            gen.writeStringField('mutability', 'readWrite');                            
-                            gen.writeBooleanField('required', false);                             
-                            gen.writeBooleanField('caseExact', false); 
-                            gen.writeFieldName('subAttributes');
-                            gen.writeStartArray();
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'value');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The value');                   
-                                    gen.writeStringField('mutability', 'readOnly');                             
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'primary');                       
-                                    gen.writeStringField('type', 'boolean');   
-                                    gen.writeStringField('description', 'Is the primary value');                   
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'display');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The value suitable for display');                   
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'type');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'A label indicating the attributes function; e.g., work or home');                   
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                    gen.writeFieldName('canonicalValues');
-                                    gen.writeStartArray();
-                                        gen.writeStartObject();
-                                            gen.writeStringField('value', 'work');   
-                                        gen.writeEndObject();
-                                    gen.writeEndArray();
-                                gen.writeEndObject();   
-                            gen.writeEndArray();
-                        gen.writeEndObject();
-                        //phoneNumbers
-                        gen.writeStartObject();
-                            gen.writeStringField('name', 'phoneNumbers');                       
-                            gen.writeStringField('type', 'complex');   
-                            gen.writeBooleanField('multiValued', true); 
-                            gen.writeStringField('description', 'Phone numbers for the User');                   
-        
-                            gen.writeStringField('mutability', 'readWrite');                            
-                            gen.writeBooleanField('required', false);                             
-                            gen.writeBooleanField('caseExact', false); 
-                            gen.writeFieldName('subAttributes');
-                            gen.writeStartArray();
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'value');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The value');                   
-                                    gen.writeStringField('mutability', 'readOnly');                             
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'primary');                       
-                                    gen.writeStringField('type', 'boolean');   
-                                    gen.writeStringField('description', 'Is the primary value');                   
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'display');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The value suitable for display');                   
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'type');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'A label indicating the attributes function; e.g., work or home');                   
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                    gen.writeFieldName('canonicalValues');
-                                    gen.writeStartArray();
-                                        gen.writeStartObject();
-                                            gen.writeStringField('value', 'work');   
-                                        gen.writeEndObject();
-                                        gen.writeStartObject();
-                                            gen.writeStringField('value', 'mobile');   
-                                        gen.writeEndObject();
-                                        gen.writeStartObject();
-                                            gen.writeStringField('value', 'fax');   
-                                        gen.writeEndObject();
-                                    gen.writeEndArray();
-                                gen.writeEndObject();   
-                            gen.writeEndArray();
-                        gen.writeEndObject();
-                        //photos
-                        gen.writeStartObject();
-                            gen.writeStringField('name', 'photos');                       
-                            gen.writeStringField('type', 'complex');   
-                            gen.writeBooleanField('multiValued', true); 
-                            gen.writeStringField('description', 'URLs for the users photos');                   
-        
-                            gen.writeStringField('mutability', 'readWrite');                            
-                            gen.writeBooleanField('required', false);                             
-                            gen.writeBooleanField('caseExact', false); 
-                            gen.writeFieldName('subAttributes');
-                            gen.writeStartArray();
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'value');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The value');                   
-                                    gen.writeStringField('mutability', 'readOnly');                             
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'primary');                       
-                                    gen.writeStringField('type', 'boolean');   
-                                    gen.writeStringField('description', 'Is the primary value');                   
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'display');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The value suitable for display');                   
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'type');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'A label indicating the attributes function; e.g., work or home');                   
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                    gen.writeFieldName('canonicalValues');
-                                    gen.writeStartArray();
-                                        gen.writeStartObject();
-                                            gen.writeStringField('value', 'photo');   
-                                        gen.writeEndObject();
-                                        gen.writeStartObject();
-                                            gen.writeStringField('value', 'thumbnail');   
-                                        gen.writeEndObject();
-                                    gen.writeEndArray();
-                                gen.writeEndObject();   
-                            gen.writeEndArray();
-                        gen.writeEndObject();
-                        //addresses
-                        gen.writeStartObject();
-                            gen.writeStringField('name', 'addresses');                       
-                            gen.writeStringField('type', 'complex');   
-                            gen.writeBooleanField('multiValued', false); 
-                            gen.writeStringField('description', 'The full mailing address');                   
-        
-                            gen.writeStringField('mutability', 'readWrite');                            
-                            gen.writeBooleanField('required', false);                             
-                            gen.writeBooleanField('caseExact', false); 
-                            gen.writeFieldName('subAttributes');
-                            gen.writeStartArray();
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'value');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The value');                   
-                                    gen.writeStringField('mutability', 'readOnly');                             
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'primary');                       
-                                    gen.writeStringField('type', 'boolean');   
-                                    gen.writeStringField('description', 'Is the primary value');                   
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'display');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The value suitable for display');                   
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'type');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'A label indicating the attributes function; e.g., work or home');                   
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                    gen.writeFieldName('canonicalValues');
-                                    gen.writeStartArray();
-                                        gen.writeStartObject();
-                                            gen.writeStringField('value', 'work');   
-                                        gen.writeEndObject();
-                                        gen.writeStartObject();
-                                            gen.writeStringField('value', 'thumbnail');   
-                                        gen.writeEndObject();
-                                    gen.writeEndArray();
-                                gen.writeEndObject();   
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'formatted');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The value suitable for display');                   
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'streetAddress');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The full street address component');                   
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'locality');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The city or locality');                   
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'region');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The state or region');                   
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'postalCode');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The zip or postalCode');                   
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'country');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The country');                   
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                            gen.writeEndArray();
-                        gen.writeEndObject();
-                        gen.writeStartObject();
-                            gen.writeStringField('name', 'entitlements');                       
-                            gen.writeStringField('type', 'complex');   
-                            gen.writeBooleanField('multiValued', true); 
-                            gen.writeStringField('description', 'The entiitlements of a user');                   
-                            gen.writeStringField('mutability', 'readWrite');                            
-                            gen.writeBooleanField('required', true);   
-                            gen.writeFieldName('subAttributes');
-                            gen.writeStartArray();
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'value');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The value');                   
-                                    gen.writeStringField('mutability', 'readOnly');                             
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'primary');                       
-                                    gen.writeStringField('type', 'boolean');   
-                                    gen.writeStringField('description', 'Is the primary value');                   
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'display');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The value suitable for display');                   
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                            gen.writeEndArray();                                                      
-                        gen.writeEndObject();                        
-                        gen.writeStartObject();
-                            gen.writeStringField('name', 'groups');                       
-                            gen.writeStringField('type', 'complex');   
-                            gen.writeBooleanField('multiValued', true); 
-                            gen.writeStringField('description', 'The groups a user belongs to');                   
-        
-                            gen.writeStringField('mutability', 'readOnly');                             
-                            gen.writeBooleanField('required', true);     
-                            gen.writeFieldName('subAttributes');
-                            gen.writeStartArray();
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'value');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The value');                   
-                                    gen.writeStringField('mutability', 'readOnly');                             
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'display');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The value suitable for display');                   
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                            gen.writeEndArray();                                                     
-                        gen.writeEndObject();     
-                        gen.writeStartObject();
-                            gen.writeStringField('name', 'roles');                       
-                            gen.writeStringField('type', 'complex');   
-                            gen.writeBooleanField('multiValued', false); 
-                            gen.writeStringField('description', 'The role a user is assigned to');                   
-        
-                            gen.writeStringField('mutability', 'readWrite');                            
-                            gen.writeBooleanField('required', true);        
-                            gen.writeFieldName('subAttributes');
-                            gen.writeStartArray();
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'value');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The value');                   
-                                    gen.writeStringField('mutability', 'readOnly');                             
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'display');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The value suitable for display');                   
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                            gen.writeEndArray();                                                  
                         gen.writeEndObject();  
                         gen.writeStartObject();
-                            gen.writeStringField('name', 'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User');                       
-                            gen.writeStringField('type', 'complex');   
-                            gen.writeBooleanField('multiValued', false); 
-                            gen.writeStringField('description', 'Scim Enterprise extensions');                   
-                            gen.writeStringField('schema', 'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User');    
+                            gen.writeStringField('name', 'familyName');                       
+                            gen.writeStringField('type', 'string');   
+                            gen.writeStringField('description', 'The family name (lastName) of the User');                   
                             gen.writeStringField('mutability', 'readWrite');                            
-                            gen.writeBooleanField('required', true); 
-                            gen.writeFieldName('subAttributes');
-                            gen.writeStartArray();
-                                 gen.writeStartObject();
-                                    gen.writeStringField('name', 'organization');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The organization the user belongs to');                  
-                                    gen.writeStringField('mutability', 'readOnly');                             
-                                    gen.writeBooleanField('required', true);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'employeeNumber');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The employee number of the user');             
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'division');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The division of the user');             
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'department');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The department of the user');             
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'manager');                       
-                                    gen.writeStringField('type', 'complex');   
-                                    gen.writeStringField('description', 'The manager of the user');             
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                    gen.writeFieldName('subAttributes');
-                                    gen.writeStartArray();
-                                         gen.writeStartObject();
-                                            gen.writeStringField('name', 'managerId');                       
-                                            gen.writeStringField('type', 'string');   
-                                            gen.writeStringField('description', 'The id of the manager user');                  
-                                            gen.writeStringField('mutability', 'readWrite');                            
-                                            gen.writeBooleanField('required', false);                             
-                                            gen.writeBooleanField('caseExact', false); 
-                                        gen.writeEndObject();
-                                        gen.writeStartObject();
-                                            gen.writeStringField('name', 'displayName');                       
-                                            gen.writeStringField('type', 'string');   
-                                            gen.writeStringField('description', 'The display name of the manager user');             
-                                            gen.writeStringField('mutability', 'readOnly');                             
-                                            gen.writeBooleanField('required', false);                             
-                                            gen.writeBooleanField('caseExact', false); 
-                                        gen.writeEndObject();
-                                    gen.writeEndArray();
-                                gen.writeEndObject();
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'delegatedApprover');                       
-                                    gen.writeStringField('type', 'complex');   
-                                    gen.writeStringField('description', 'The delegated approver of the user');             
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                    gen.writeFieldName('subAttributes');
-                                    gen.writeStartArray();
-                                         gen.writeStartObject();
-                                            gen.writeStringField('name', 'delegatedApproverId');                       
-                                            gen.writeStringField('type', 'string');   
-                                            gen.writeStringField('description', 'The id of the delegated approver user');                  
-                                            gen.writeStringField('mutability', 'readWrite');                            
-                                            gen.writeBooleanField('required', false);                             
-                                            gen.writeBooleanField('caseExact', false); 
-                                        gen.writeEndObject();
-                                        gen.writeStartObject();
-                                            gen.writeStringField('name', 'displayName');                       
-                                            gen.writeStringField('type', 'string');   
-                                            gen.writeStringField('description', 'The display name of the delegated approver user');             
-                                            gen.writeStringField('mutability', 'readOnly');                             
-                                            gen.writeBooleanField('required', false);                             
-                                            gen.writeBooleanField('caseExact', false); 
-                                        gen.writeEndObject();
-                                    gen.writeEndArray();
-                                gen.writeEndObject();                                                                                                                                                                               
-                            gen.writeEndArray();                                                        
+                            gen.writeBooleanField('required', true);                             
+                            gen.writeBooleanField('caseExact', false); 
+                        gen.writeEndObject();  
+                        gen.writeStartObject();
+                            gen.writeStringField('name', 'middleName');                       
+                            gen.writeStringField('type', 'string');   
+                            gen.writeStringField('description', 'The middleName of the User');                   
+                            gen.writeStringField('mutability', 'readWrite');                            
+                            gen.writeBooleanField('required', false);                             
+                            gen.writeBooleanField('caseExact', false); 
+                        gen.writeEndObject();  
+                        gen.writeStartObject();
+                            gen.writeStringField('name', 'givenName');                       
+                            gen.writeStringField('type', 'string');   
+                            gen.writeStringField('description', 'The givenName of the user');                   
+                            gen.writeStringField('mutability', 'readWrite');                            
+                            gen.writeBooleanField('required', false);                             
+                            gen.writeBooleanField('caseExact', false); 
                         gen.writeEndObject();   
                         gen.writeStartObject();
-                            gen.writeStringField('name', 'urn:salesforce:schemas:extension:external:1.0');                       
-                            gen.writeStringField('type', 'complex');   
-                            gen.writeBooleanField('multiValued', false); 
-                            gen.writeStringField('description', 'Salesforce external users extensions');                   
-                            gen.writeStringField('schema', 'urn:salesforce:schemas:extension:external:1.0');    
-                            gen.writeStringField('mutability', 'readWrite');                            
-                            gen.writeBooleanField('required', true); 
-                            gen.writeFieldName('subAttributes');
-                            gen.writeStartArray();
-                                 gen.writeStartObject();
-                                    gen.writeStringField('name', 'accountId');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The account the external user is associated to');                  
-                                    gen.writeStringField('mutability', 'readOnly');                             
-                                    gen.writeBooleanField('required', true);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'contactId');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The contact record the external user is associated to');             
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();
-                            gen.writeEndArray();                                                        
-                        gen.writeEndObject();                                                                                                 
-                        // Custom Field Extensions
-                        gen.writeStartObject();
-                            gen.writeStringField('name', 'urn:salesforce:schemas:extension:' + UserInfo.getOrganizationId());                       
-                            gen.writeStringField('type', 'complex');   
-                            gen.writeBooleanField('multiValued', false); 
-                            gen.writeStringField('description', 'All extension custom fields for a user in the organization');                   
-                            gen.writeStringField('schema', 'urn:salesforce:schemas:extension:' + UserInfo.getOrganizationId());    
+                            gen.writeStringField('name', 'honorificPrefix');                       
+                            gen.writeStringField('type', 'string');   
+                            gen.writeStringField('description', 'The honorific prefix(es) of the User');                   
                             gen.writeStringField('mutability', 'readWrite');                            
                             gen.writeBooleanField('required', false);                             
                             gen.writeBooleanField('caseExact', false); 
-                            gen.writeFieldName('subAttributes');
-                            gen.writeStartArray();
-                                Map<String, Schema.SObjectField> r = Schema.sObjectType.User.fields.getMap();
-                                for (String key : r.keySet()) {
-                                    SObjectField thisField = r.get(key);
-                                    DescribeFieldResult thisDescribeResult = thisField.getDescribe();
-                                    if (thisDescribeResult.isCustom()) {
-                                         gen.writeStartObject();
-                                            gen.writeStringField('name', thisDescribeResult.getName());                       
-                                            gen.writeStringField('type', getScimTypeFromSoapType(thisDescribeResult.getSOAPType()));   
-                                            gen.writeStringField('description', thisDescribeResult.getInlineHelpText() + '');       // Description somehow not available from the sobject api.            
-                                            gen.writeBooleanField('readOnly', !thisDescribeResult.isUpdateable());                             
-                                            gen.writeBooleanField('required', !thisDescribeResult.isNillable());                             
-                                            gen.writeBooleanField('caseExact', thisDescribeResult.isCaseSensitive()); 
-                                        gen.writeEndObject();         
-                                    }
-                                }
-                            gen.writeEndArray();
-                        gen.writeEndObject();                        
-                    gen.writeEndArray();
-                    gen.writeFieldName('meta');
+                        gen.writeEndObject();  
                         gen.writeStartObject();
-                            gen.writeStringField('resourceType', 'Schema');
-                            gen.writeStringField('location', '/v2/Schemas//v2/Schemas/urn:ietf:params:scim:schemas:core:2.0:User');
-                        gen.writeEndObject();
+                            gen.writeStringField('name', 'honorificSuffix');                       
+                            gen.writeStringField('type', 'string');   
+                            gen.writeStringField('description', 'The honorific suffix(es) of the User');                   
+                            gen.writeStringField('mutability', 'readWrite');                            
+                            gen.writeBooleanField('required', false);                             
+                            gen.writeBooleanField('caseExact', false); 
+                        gen.writeEndObject();  
+                    gen.writeEndArray();
                 gen.writeEndObject();
-        }
-        if (doGroup){
+                //displayName
                 gen.writeStartObject();
-                    gen.writeStringField('id', 'urn:ietf:params:scim:schemas:core:2.0:Group'); 
-                    gen.writeStringField('name', 'Group');   
-                    gen.writeStringField('description', 'SCIM core resource for representing groups');               
-                    gen.writeStringField('schema', 'urn:ietf:params:scim:schemas:core:2.0:Group');               
-                    gen.writeStringField('endpoint', '/Groups');   
-                    gen.writeFieldName('attributes');
-                    gen.writeStartArray(); 
+                    gen.writeStringField('name', 'displayName');                       
+                    gen.writeStringField('type', 'string');   
+                    gen.writeBooleanField('multiValued', false); 
+                    gen.writeStringField('description', 'The name of the User, suitable for display');                   
+
+                    gen.writeStringField('mutability', 'readWrite');                            
+                    gen.writeBooleanField('required', false); 
+                    gen.writeBooleanField('caseExact', false); 
+                gen.writeEndObject();
+                //nickName
+                gen.writeStartObject();
+                    gen.writeStringField('name', 'nickName');                       
+                    gen.writeStringField('type', 'string');   
+                    gen.writeBooleanField('multiValued', false); 
+                    gen.writeStringField('description', 'The casual way to address the user in real life');                   
+
+                    gen.writeStringField('mutability', 'readWrite');                            
+                    gen.writeBooleanField('required', false); 
+                    gen.writeBooleanField('caseExact', false); 
+                gen.writeEndObject();
+                //profileUrl
+                gen.writeStartObject();
+                    gen.writeStringField('name', 'profileUrl');                       
+                    gen.writeStringField('type', 'string');   
+                    gen.writeBooleanField('multiValued', false); 
+                    gen.writeStringField('description', 'URL to a page representing the User online');                   
+
+                    gen.writeStringField('mutability', 'readWrite');                            
+                    gen.writeBooleanField('required', false); 
+                    gen.writeBooleanField('caseExact', false); 
+                gen.writeEndObject();
+                //title
+                gen.writeStartObject();
+                    gen.writeStringField('name', 'title');                       
+                    gen.writeStringField('type', 'string');   
+                    gen.writeBooleanField('multiValued', false); 
+                    gen.writeStringField('description', 'The Users title, such as Vice President');                   
+
+                    gen.writeStringField('mutability', 'readWrite');                            
+                    gen.writeBooleanField('required', false); 
+                    gen.writeBooleanField('caseExact', false); 
+                gen.writeEndObject();
+                //userType
+                gen.writeStartObject();
+                    gen.writeStringField('name', 'userType');                       
+                    gen.writeStringField('type', 'string');   
+                    gen.writeBooleanField('multiValued', false); 
+                    gen.writeStringField('description', 'The organization-to-user relationship');                   
+
+                    gen.writeStringField('mutability', 'readWrite');                            
+                    gen.writeBooleanField('required', false); 
+                    gen.writeBooleanField('caseExact', false); 
+                gen.writeEndObject();
+                //preferredLanguage
+                gen.writeStartObject();
+                    gen.writeStringField('name', 'preferredLanguage');                       
+                    gen.writeStringField('type', 'string');   
+                    gen.writeBooleanField('multiValued', false); 
+                    gen.writeStringField('description', 'The Users preferred written or spoken language. Generally used for selecting a localized User interface.  Valid values are concatenation of the ISO 639-1 two letter language code, an underscore, and the ISO 3166-1 2 letter country code; e.g., en_US specifies the language English and country US');                   
+
+                    gen.writeStringField('mutability', 'readWrite');                            
+                    gen.writeBooleanField('required', false); 
+                    gen.writeBooleanField('caseExact', false); 
+                gen.writeEndObject();
+                //locale
+                gen.writeStartObject();
+                    gen.writeStringField('name', 'locale');                       
+                    gen.writeStringField('type', 'string');   
+                    gen.writeBooleanField('multiValued', false); 
+                    gen.writeStringField('description', 'Used to indicate the Users default location for purposes of localizing items such as currency, date time format, numerical representations, etc. A locale value is a concatenation of the ISO 639-1 two letter language code an underscore, and the ISO 3166-1 2 letter country code; e.g., en_US specifies the language English  and country US');                   
+
+                    gen.writeStringField('mutability', 'readWrite');                            
+                    gen.writeBooleanField('required', false); 
+                    gen.writeBooleanField('caseExact', false); 
+                gen.writeEndObject();
+                //timezone
+                gen.writeStartObject();
+                    gen.writeStringField('name', 'timezone');                       
+                    gen.writeStringField('type', 'string');   
+                    gen.writeBooleanField('multiValued', false); 
+                    gen.writeStringField('description', 'The Users time zone in the Olson timezone database format;  e.g., America/Los_Angeles');                   
+
+                    gen.writeStringField('mutability', 'readWrite');                            
+                    gen.writeBooleanField('required', false); 
+                    gen.writeBooleanField('caseExact', false); 
+                gen.writeEndObject();
+                //displayName
+                gen.writeStartObject();
+                    gen.writeStringField('name', 'active');                       
+                    gen.writeStringField('type', 'boolean');   
+                    gen.writeBooleanField('multiValued', false); 
+                    gen.writeStringField('description', 'A Boolean value indicating the Users status');                   
+
+                    gen.writeStringField('mutability', 'readWrite');                            
+                    gen.writeBooleanField('required', false); 
+                    gen.writeBooleanField('caseExact', false); 
+                gen.writeEndObject();
+                //password
+                gen.writeStartObject();
+                    gen.writeStringField('name', 'password');                       
+                    gen.writeStringField('type', 'string');   
+                    gen.writeBooleanField('multiValued', false); 
+                    gen.writeStringField('description', 'Password of the user');                      
+                    gen.writeStringField('mutability', 'writeOnly');                            
+                    gen.writeBooleanField('required', false);                             
+                gen.writeEndObject();
+
+                //emails
+                gen.writeStartObject();
+                    gen.writeStringField('name', 'emails');                       
+                    gen.writeStringField('type', 'complex');   
+                    gen.writeBooleanField('multiValued', true); 
+                    gen.writeStringField('description', 'email address for the User');                   
+
+                    gen.writeStringField('mutability', 'readWrite');                            
+                    gen.writeBooleanField('required', true);                             
+                    gen.writeBooleanField('caseExact', false); 
+                    gen.writeFieldName('subAttributes');
+                    gen.writeStartArray();
                         gen.writeStartObject();
-                            gen.writeStringField('name', 'id');                       
+                            gen.writeStringField('name', 'value');                       
                             gen.writeStringField('type', 'string');   
-                            gen.writeBooleanField('multiValued', false); 
-                            gen.writeStringField('description', 'Unique identifier for the SCIM resource as defined by the Service Provider.');                   
-    
+                            gen.writeStringField('description', 'The value');                   
                             gen.writeStringField('mutability', 'readOnly');                             
-                            gen.writeBooleanField('required', true);                             
+                            gen.writeBooleanField('required', false);                             
                             gen.writeBooleanField('caseExact', false); 
-                        gen.writeEndObject();     
-                        //displayName
+                        gen.writeEndObject();  
                         gen.writeStartObject();
-                            gen.writeStringField('name', 'displayName');                       
-                            gen.writeStringField('type', 'string');   
-                            gen.writeBooleanField('multiValued', false); 
-                            gen.writeStringField('description', 'The name of the User, suitable for display');                   
-    
-                            gen.writeStringField('mutability', 'readWrite');                            
-                            gen.writeBooleanField('required', false); 
-                            gen.writeBooleanField('caseExact', false); 
-                        gen.writeEndObject();
-        				//members
-                        gen.writeStartObject();
-                            gen.writeStringField('name', 'members');                       
-                            gen.writeStringField('type', 'complex');   
-                            gen.writeBooleanField('multiValued', false); 
-                            gen.writeStringField('description', 'The members of the group');                   
-    
-                            gen.writeStringField('mutability', 'readWrite');                            
-                            gen.writeBooleanField('required', false);     
-                            gen.writeFieldName('subAttributes');
-                            gen.writeStartArray();
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'value');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The id of the member');                   
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'type');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The type of membership of the member in the group');                   
-                                    gen.writeStringField('mutability', 'readOnly');                             
-                                    gen.writeBooleanField('required', true);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                            gen.writeEndArray();                                                     
-                        gen.writeEndObject();
-						/*
-        				//meta
-                        gen.writeStartObject();
-                            gen.writeStringField('name', 'meta');                       
-                            gen.writeStringField('type', 'complex');   
-                            gen.writeBooleanField('multiValued', false); 
-                            gen.writeStringField('description', 'A complex type containing metadata about the resource');                   
-    
+                            gen.writeStringField('name', 'primary');                       
+                            gen.writeStringField('type', 'boolean');   
+                            gen.writeStringField('description', 'Is the primary value');                   
                             gen.writeStringField('mutability', 'readWrite');                            
                             gen.writeBooleanField('required', false);                             
                             gen.writeBooleanField('caseExact', false); 
-                            gen.writeFieldName('subAttributes');
-                            gen.writeStartArray();
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'created');                       
-                                    gen.writeStringField('type', 'datetime');   
-                                    gen.writeStringField('description', 'The DateTime the Resource was added to the Service Provider');                   
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'lastModified');                       
-                                    gen.writeStringField('type', 'datetime');   
-                                    gen.writeStringField('description', 'The most recent DateTime the details of this Resource were updated at the Service Provider');                   
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'version');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The version of the Resource being returned');                   
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();   
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'attributes');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The names of the attributes to remove from the Resource during a PATCH operation');                   
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                            gen.writeEndArray();
-                        gen.writeEndObject();                                                                                     
-						*/
-                    gen.writeEndArray();
-                    gen.writeFieldName('meta');
+                        gen.writeEndObject();  
                         gen.writeStartObject();
-                            gen.writeStringField('resourceType', 'Schema');
-                            gen.writeStringField('location', '/v2/Schemas//v2/Schemas/urn:ietf:params:scim:schemas:core:2.0:Group');
-                        gen.writeEndObject();
-                gen.writeEndObject();  
-        }
-        if (doEntitlement){
-                gen.writeStartObject();
-                    gen.writeStringField('id', 'urn:salesforce:schemas:extension:1.0:Entitlement'); 
-                    gen.writeStringField('name', 'Entitlement');   
-                    gen.writeStringField('description', 'Schema resource for representing entitlements');               
-                    gen.writeStringField('schema', 'urn:salesforce:schemas:extension:1.0:Entitlement');               
-                    gen.writeStringField('endpoint', '/Entitlements');   
-                    gen.writeFieldName('attributes');
-                    gen.writeStartArray(); 
-                        gen.writeStartObject();
-                            gen.writeStringField('name', 'id');                       
+                            gen.writeStringField('name', 'display');                       
                             gen.writeStringField('type', 'string');   
-                            gen.writeBooleanField('multiValued', false); 
-                            gen.writeStringField('description', 'Unique identifier for the SCIM resource as defined by the Service Provider.');                   
-                            gen.writeStringField('mutability', 'readOnly');                             
-                            gen.writeBooleanField('required', true);                             
+                            gen.writeStringField('description', 'The value suitable for display');                   
+                            gen.writeStringField('mutability', 'readWrite');                            
+                            gen.writeBooleanField('required', false);                             
                             gen.writeBooleanField('caseExact', false); 
-                        gen.writeEndObject();     
-                        //displayName
-                        gen.writeStartObject();
-                            gen.writeStringField('name', 'displayName');                       
-                            gen.writeStringField('type', 'string');   
-                            gen.writeBooleanField('multiValued', false); 
-                            gen.writeStringField('description', 'The name of the Entitlement, suitable for display');                   
-                            gen.writeStringField('mutability', 'readOnly');                            
-                            gen.writeBooleanField('required', false); 
-                            gen.writeBooleanField('caseExact', false); 
-                        gen.writeEndObject();
+                        gen.writeEndObject();  
                         gen.writeStartObject();
                             gen.writeStringField('name', 'type');                       
                             gen.writeStringField('type', 'string');   
-                            gen.writeBooleanField('multiValued', false); 
-                            gen.writeStringField('description', 'The type of entitlment');                   
-                            gen.writeStringField('mutability', 'readOnly');                            
-                            gen.writeBooleanField('required', false); 
-                            gen.writeBooleanField('caseExact', false); 
-                        gen.writeEndObject();
-                        gen.writeStartObject();
-                            gen.writeStringField('name', 'members');                       
-                            gen.writeStringField('type', 'complex');   
-                            gen.writeBooleanField('multiValued', true); 
-                            gen.writeStringField('description', 'The members associated with the entitlement');                   
-    
+                            gen.writeStringField('description', 'A label indicating the attributes function; e.g., work or home');                   
                             gen.writeStringField('mutability', 'readWrite');                            
-                            gen.writeBooleanField('required', false);     
-                            gen.writeFieldName('subAttributes');
-                            gen.writeStartArray();
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'value');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The id of the member');                   
-                                    gen.writeStringField('mutability', 'readWrite');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'display');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The name of the member');                   
-                                    gen.writeStringField('mutability', 'readOnly');                             
-                                    gen.writeBooleanField('required', true);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                            gen.writeEndArray();                                                     
-                        gen.writeEndObject();
-						/*
-						//meta
-        				gen.writeStartObject();
-                            gen.writeStringField('name', 'meta');                       
-                            gen.writeStringField('type', 'complex');   
-                            gen.writeBooleanField('multiValued', false); 
-                            gen.writeStringField('description', 'A complex type containing metadata about the resource');                   
-                            gen.writeStringField('mutability', 'readOnly');                            
                             gen.writeBooleanField('required', false);                             
                             gen.writeBooleanField('caseExact', false); 
-                            gen.writeFieldName('subAttributes');
+                            gen.writeFieldName('canonicalValues');
                             gen.writeStartArray();
                                 gen.writeStartObject();
-                                    gen.writeStringField('name', 'created');                       
-                                    gen.writeStringField('type', 'datetime');   
-                                    gen.writeStringField('description', 'The DateTime the Resource was added to the Service Provider');                                               gen.writeStringField('mutability', 'readOnly');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'lastModified');                       
-                                    gen.writeStringField('type', 'datetime');   
-                                    gen.writeStringField('description', 'The most recent DateTime the details of this Resource were updated at the Service Provider');                   
-                                    gen.writeStringField('mutability', 'readOnly');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'version');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The version of the Resource being returned');                   
-                                    gen.writeStringField('mutability', 'readOnly');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();   
+                                    gen.writeStringField('value', 'work');   
+                                gen.writeEndObject();
                             gen.writeEndArray();
-                        gen.writeEndObject();                                                                                 
-						*/
+                        gen.writeEndObject();   
                     gen.writeEndArray();
-                    gen.writeFieldName('meta');
-                        gen.writeStartObject();
-                            gen.writeStringField('resourceType', 'Schema');
-                            gen.writeStringField('location', '/v2/Schemas/urn:salesforce:schemas:extension:external:1.0:Entitlement');
-                        gen.writeEndObject();
+                gen.writeEndObject();
+                //phoneNumbers
+                gen.writeStartObject();
+                    gen.writeStringField('name', 'phoneNumbers');                       
+                    gen.writeStringField('type', 'complex');   
+                    gen.writeBooleanField('multiValued', true); 
+                    gen.writeStringField('description', 'Phone numbers for the User');                   
 
-                gen.writeEndObject();                                                   
-        }                
-
-        if (doRole){
-                  gen.writeStartObject();
-                    gen.writeStringField('id', 'urn:salesforce:schemas:extension:1.0:Role'); 
-                    gen.writeStringField('name', 'Role');   
-                    gen.writeStringField('description', 'Schema resource for representing roles');               
-                    gen.writeStringField('schema', 'urn:salesforce:schemas:extension:1.0:Role');               
-                    gen.writeStringField('endpoint', '/Roles');   
-                    gen.writeFieldName('attributes');
-                    gen.writeStartArray(); 
+                    gen.writeStringField('mutability', 'readWrite');                            
+                    gen.writeBooleanField('required', false);                             
+                    gen.writeBooleanField('caseExact', false); 
+                    gen.writeFieldName('subAttributes');
+                    gen.writeStartArray();
                         gen.writeStartObject();
-                            gen.writeStringField('name', 'id');                       
+                            gen.writeStringField('name', 'value');                       
                             gen.writeStringField('type', 'string');   
-                            gen.writeBooleanField('multiValued', false); 
-                            gen.writeStringField('description', 'Unique identifier for the SCIM resource as defined by the Service Provider.');                   
+                            gen.writeStringField('description', 'The value');                   
+                            gen.writeStringField('mutability', 'readOnly');                             
+                            gen.writeBooleanField('required', false);                             
+                            gen.writeBooleanField('caseExact', false); 
+                        gen.writeEndObject();  
+                        gen.writeStartObject();
+                            gen.writeStringField('name', 'primary');                       
+                            gen.writeStringField('type', 'boolean');   
+                            gen.writeStringField('description', 'Is the primary value');                   
+                            gen.writeStringField('mutability', 'readWrite');                            
+                            gen.writeBooleanField('required', false);                             
+                            gen.writeBooleanField('caseExact', false); 
+                        gen.writeEndObject();  
+                        gen.writeStartObject();
+                            gen.writeStringField('name', 'display');                       
+                            gen.writeStringField('type', 'string');   
+                            gen.writeStringField('description', 'The value suitable for display');                   
+                            gen.writeStringField('mutability', 'readWrite');                            
+                            gen.writeBooleanField('required', false);                             
+                            gen.writeBooleanField('caseExact', false); 
+                        gen.writeEndObject();  
+                        gen.writeStartObject();
+                            gen.writeStringField('name', 'type');                       
+                            gen.writeStringField('type', 'string');   
+                            gen.writeStringField('description', 'A label indicating the attributes function; e.g., work or home');                   
+                            gen.writeStringField('mutability', 'readWrite');                            
+                            gen.writeBooleanField('required', false);                             
+                            gen.writeBooleanField('caseExact', false); 
+                            gen.writeFieldName('canonicalValues');
+                            gen.writeStartArray();
+                                gen.writeStartObject();
+                                    gen.writeStringField('value', 'work');   
+                                gen.writeEndObject();
+                                gen.writeStartObject();
+                                    gen.writeStringField('value', 'mobile');   
+                                gen.writeEndObject();
+                                gen.writeStartObject();
+                                    gen.writeStringField('value', 'fax');   
+                                gen.writeEndObject();
+                            gen.writeEndArray();
+                        gen.writeEndObject();   
+                    gen.writeEndArray();
+                gen.writeEndObject();
+                //photos
+                gen.writeStartObject();
+                    gen.writeStringField('name', 'photos');                       
+                    gen.writeStringField('type', 'complex');   
+                    gen.writeBooleanField('multiValued', true); 
+                    gen.writeStringField('description', 'URLs for the users photos');                   
+
+                    gen.writeStringField('mutability', 'readWrite');                            
+                    gen.writeBooleanField('required', false);                             
+                    gen.writeBooleanField('caseExact', false); 
+                    gen.writeFieldName('subAttributes');
+                    gen.writeStartArray();
+                        gen.writeStartObject();
+                            gen.writeStringField('name', 'value');                       
+                            gen.writeStringField('type', 'string');   
+                            gen.writeStringField('description', 'The value');                   
+                            gen.writeStringField('mutability', 'readOnly');                             
+                            gen.writeBooleanField('required', false);                             
+                            gen.writeBooleanField('caseExact', false); 
+                        gen.writeEndObject();  
+                        gen.writeStartObject();
+                            gen.writeStringField('name', 'primary');                       
+                            gen.writeStringField('type', 'boolean');   
+                            gen.writeStringField('description', 'Is the primary value');                   
+                            gen.writeStringField('mutability', 'readWrite');                            
+                            gen.writeBooleanField('required', false);                             
+                            gen.writeBooleanField('caseExact', false); 
+                        gen.writeEndObject();  
+                        gen.writeStartObject();
+                            gen.writeStringField('name', 'display');                       
+                            gen.writeStringField('type', 'string');   
+                            gen.writeStringField('description', 'The value suitable for display');                   
+                            gen.writeStringField('mutability', 'readWrite');                            
+                            gen.writeBooleanField('required', false);                             
+                            gen.writeBooleanField('caseExact', false); 
+                        gen.writeEndObject();  
+                        gen.writeStartObject();
+                            gen.writeStringField('name', 'type');                       
+                            gen.writeStringField('type', 'string');   
+                            gen.writeStringField('description', 'A label indicating the attributes function; e.g., work or home');                   
+                            gen.writeStringField('mutability', 'readWrite');                            
+                            gen.writeBooleanField('required', false);                             
+                            gen.writeBooleanField('caseExact', false); 
+                            gen.writeFieldName('canonicalValues');
+                            gen.writeStartArray();
+                                gen.writeStartObject();
+                                    gen.writeStringField('value', 'photo');   
+                                gen.writeEndObject();
+                                gen.writeStartObject();
+                                    gen.writeStringField('value', 'thumbnail');   
+                                gen.writeEndObject();
+                            gen.writeEndArray();
+                        gen.writeEndObject();   
+                    gen.writeEndArray();
+                gen.writeEndObject();
+                //addresses
+                gen.writeStartObject();
+                    gen.writeStringField('name', 'addresses');                       
+                    gen.writeStringField('type', 'complex');   
+                    gen.writeBooleanField('multiValued', false); 
+                    gen.writeStringField('description', 'The full mailing address');                   
+
+                    gen.writeStringField('mutability', 'readWrite');                            
+                    gen.writeBooleanField('required', false);                             
+                    gen.writeBooleanField('caseExact', false); 
+                    gen.writeFieldName('subAttributes');
+                    gen.writeStartArray();
+                        gen.writeStartObject();
+                            gen.writeStringField('name', 'value');                       
+                            gen.writeStringField('type', 'string');   
+                            gen.writeStringField('description', 'The value');                   
+                            gen.writeStringField('mutability', 'readOnly');                             
+                            gen.writeBooleanField('required', false);                             
+                            gen.writeBooleanField('caseExact', false); 
+                        gen.writeEndObject();  
+                        gen.writeStartObject();
+                            gen.writeStringField('name', 'primary');                       
+                            gen.writeStringField('type', 'boolean');   
+                            gen.writeStringField('description', 'Is the primary value');                   
+                            gen.writeStringField('mutability', 'readWrite');                            
+                            gen.writeBooleanField('required', false);                             
+                            gen.writeBooleanField('caseExact', false); 
+                        gen.writeEndObject();  
+                        gen.writeStartObject();
+                            gen.writeStringField('name', 'display');                       
+                            gen.writeStringField('type', 'string');   
+                            gen.writeStringField('description', 'The value suitable for display');                   
+                            gen.writeStringField('mutability', 'readWrite');                            
+                            gen.writeBooleanField('required', false);                             
+                            gen.writeBooleanField('caseExact', false); 
+                        gen.writeEndObject();  
+                        gen.writeStartObject();
+                            gen.writeStringField('name', 'type');                       
+                            gen.writeStringField('type', 'string');   
+                            gen.writeStringField('description', 'A label indicating the attributes function; e.g., work or home');                   
+                            gen.writeStringField('mutability', 'readWrite');                            
+                            gen.writeBooleanField('required', false);                             
+                            gen.writeBooleanField('caseExact', false); 
+                            gen.writeFieldName('canonicalValues');
+                            gen.writeStartArray();
+                                gen.writeStartObject();
+                                    gen.writeStringField('value', 'work');   
+                                gen.writeEndObject();
+                                gen.writeStartObject();
+                                    gen.writeStringField('value', 'thumbnail');   
+                                gen.writeEndObject();
+                            gen.writeEndArray();
+                        gen.writeEndObject();   
+                        gen.writeStartObject();
+                            gen.writeStringField('name', 'formatted');                       
+                            gen.writeStringField('type', 'string');   
+                            gen.writeStringField('description', 'The value suitable for display');                   
+                            gen.writeStringField('mutability', 'readWrite');                            
+                            gen.writeBooleanField('required', false);                             
+                            gen.writeBooleanField('caseExact', false); 
+                        gen.writeEndObject();  
+                        gen.writeStartObject();
+                            gen.writeStringField('name', 'streetAddress');                       
+                            gen.writeStringField('type', 'string');   
+                            gen.writeStringField('description', 'The full street address component');                   
+                            gen.writeStringField('mutability', 'readWrite');                            
+                            gen.writeBooleanField('required', false);                             
+                            gen.writeBooleanField('caseExact', false); 
+                        gen.writeEndObject();  
+                        gen.writeStartObject();
+                            gen.writeStringField('name', 'locality');                       
+                            gen.writeStringField('type', 'string');   
+                            gen.writeStringField('description', 'The city or locality');                   
+                            gen.writeStringField('mutability', 'readWrite');                            
+                            gen.writeBooleanField('required', false);                             
+                            gen.writeBooleanField('caseExact', false); 
+                        gen.writeEndObject();  
+                        gen.writeStartObject();
+                            gen.writeStringField('name', 'region');                       
+                            gen.writeStringField('type', 'string');   
+                            gen.writeStringField('description', 'The state or region');                   
+                            gen.writeStringField('mutability', 'readWrite');                            
+                            gen.writeBooleanField('required', false);                             
+                            gen.writeBooleanField('caseExact', false); 
+                        gen.writeEndObject();  
+                        gen.writeStartObject();
+                            gen.writeStringField('name', 'postalCode');                       
+                            gen.writeStringField('type', 'string');   
+                            gen.writeStringField('description', 'The zip or postalCode');                   
+                            gen.writeStringField('mutability', 'readWrite');                            
+                            gen.writeBooleanField('required', false);                             
+                            gen.writeBooleanField('caseExact', false); 
+                        gen.writeEndObject();  
+                        gen.writeStartObject();
+                            gen.writeStringField('name', 'country');                       
+                            gen.writeStringField('type', 'string');   
+                            gen.writeStringField('description', 'The country');                   
+                            gen.writeStringField('mutability', 'readWrite');                            
+                            gen.writeBooleanField('required', false);                             
+                            gen.writeBooleanField('caseExact', false); 
+                        gen.writeEndObject();  
+                    gen.writeEndArray();
+                gen.writeEndObject();
+                gen.writeStartObject();
+                    gen.writeStringField('name', 'entitlements');                       
+                    gen.writeStringField('type', 'complex');   
+                    gen.writeBooleanField('multiValued', true); 
+                    gen.writeStringField('description', 'The entiitlements of a user');                   
+                    gen.writeStringField('mutability', 'readWrite');                            
+                    gen.writeBooleanField('required', true);   
+                    gen.writeFieldName('subAttributes');
+                    gen.writeStartArray();
+                        gen.writeStartObject();
+                            gen.writeStringField('name', 'value');                       
+                            gen.writeStringField('type', 'string');   
+                            gen.writeStringField('description', 'The value');                   
+                            gen.writeStringField('mutability', 'readOnly');                             
+                            gen.writeBooleanField('required', false);                             
+                            gen.writeBooleanField('caseExact', false); 
+                        gen.writeEndObject();  
+                        gen.writeStartObject();
+                            gen.writeStringField('name', 'primary');                       
+                            gen.writeStringField('type', 'boolean');   
+                            gen.writeStringField('description', 'Is the primary value');                   
+                            gen.writeStringField('mutability', 'readWrite');                            
+                            gen.writeBooleanField('required', false);                             
+                            gen.writeBooleanField('caseExact', false); 
+                        gen.writeEndObject();  
+                        gen.writeStartObject();
+                            gen.writeStringField('name', 'display');                       
+                            gen.writeStringField('type', 'string');   
+                            gen.writeStringField('description', 'The value suitable for display');                   
+                            gen.writeStringField('mutability', 'readWrite');                            
+                            gen.writeBooleanField('required', false);                             
+                            gen.writeBooleanField('caseExact', false); 
+                        gen.writeEndObject();  
+                    gen.writeEndArray();                                                      
+                gen.writeEndObject();                        
+                gen.writeStartObject();
+                    gen.writeStringField('name', 'groups');                       
+                    gen.writeStringField('type', 'complex');   
+                    gen.writeBooleanField('multiValued', true); 
+                    gen.writeStringField('description', 'The groups a user belongs to');                   
+
+                    gen.writeStringField('mutability', 'readOnly');                             
+                    gen.writeBooleanField('required', true);     
+                    gen.writeFieldName('subAttributes');
+                    gen.writeStartArray();
+                        gen.writeStartObject();
+                            gen.writeStringField('name', 'value');                       
+                            gen.writeStringField('type', 'string');   
+                            gen.writeStringField('description', 'The value');                   
+                            gen.writeStringField('mutability', 'readOnly');                             
+                            gen.writeBooleanField('required', false);                             
+                            gen.writeBooleanField('caseExact', false); 
+                        gen.writeEndObject();  
+                        gen.writeStartObject();
+                            gen.writeStringField('name', 'display');                       
+                            gen.writeStringField('type', 'string');   
+                            gen.writeStringField('description', 'The value suitable for display');                   
+                            gen.writeStringField('mutability', 'readWrite');                            
+                            gen.writeBooleanField('required', false);                             
+                            gen.writeBooleanField('caseExact', false); 
+                        gen.writeEndObject();  
+                    gen.writeEndArray();                                                     
+                gen.writeEndObject();     
+                gen.writeStartObject();
+                    gen.writeStringField('name', 'roles');                       
+                    gen.writeStringField('type', 'complex');   
+                    gen.writeBooleanField('multiValued', false); 
+                    gen.writeStringField('description', 'The role a user is assigned to');                   
+
+                    gen.writeStringField('mutability', 'readWrite');                            
+                    gen.writeBooleanField('required', true);        
+                    gen.writeFieldName('subAttributes');
+                    gen.writeStartArray();
+                        gen.writeStartObject();
+                            gen.writeStringField('name', 'value');                       
+                            gen.writeStringField('type', 'string');   
+                            gen.writeStringField('description', 'The value');                   
+                            gen.writeStringField('mutability', 'readOnly');                             
+                            gen.writeBooleanField('required', false);                             
+                            gen.writeBooleanField('caseExact', false); 
+                        gen.writeEndObject();  
+                        gen.writeStartObject();
+                            gen.writeStringField('name', 'display');                       
+                            gen.writeStringField('type', 'string');   
+                            gen.writeStringField('description', 'The value suitable for display');                   
+                            gen.writeStringField('mutability', 'readWrite');                            
+                            gen.writeBooleanField('required', false);                             
+                            gen.writeBooleanField('caseExact', false); 
+                        gen.writeEndObject();  
+                    gen.writeEndArray();                                                  
+                gen.writeEndObject();  
+
+            gen.writeEndArray();
+            gen.writeFieldName('meta');
+                gen.writeStartObject();
+                    gen.writeStringField('resourceType', 'Schema');
+                    gen.writeStringField('location', base + path + 'Schemas/urn:ietf:params:scim:schemas:core:2.0:User');
+                gen.writeEndObject();
+        if (totalResults > 1){
+                gen.writeEndObject();  
+        }
+
+    }
+    
+        if (doGroup){
+            if (totalResults > 1){
+                gen.writeStartObject();
+            }
+            gen.writeStringField('id', 'urn:ietf:params:scim:schemas:core:2.0:Group'); 
+            gen.writeStringField('name', 'Group');   
+            gen.writeStringField('description', 'SCIM core resource for representing groups');               
+            gen.writeStringField('schema', 'urn:ietf:params:scim:schemas:core:2.0:Group');               
+            gen.writeStringField('endpoint', '/Groups');   
+            gen.writeFieldName('attributes');
+            gen.writeStartArray(); 
+                gen.writeStartObject();
+                    gen.writeStringField('name', 'id');                       
+                    gen.writeStringField('type', 'string');   
+                    gen.writeBooleanField('multiValued', false); 
+                    gen.writeStringField('description', 'Unique identifier for the SCIM resource as defined by the Service Provider.');                   
+
+                    gen.writeStringField('mutability', 'readOnly');                             
+                    gen.writeBooleanField('required', true);                             
+                    gen.writeBooleanField('caseExact', false); 
+                gen.writeEndObject();     
+                //displayName
+                gen.writeStartObject();
+                    gen.writeStringField('name', 'displayName');                       
+                    gen.writeStringField('type', 'string');   
+                    gen.writeBooleanField('multiValued', false); 
+                    gen.writeStringField('description', 'The name of the User, suitable for display');                   
+
+                    gen.writeStringField('mutability', 'readWrite');                            
+                    gen.writeBooleanField('required', false); 
+                    gen.writeBooleanField('caseExact', false); 
+                gen.writeEndObject();
+                //members
+                gen.writeStartObject();
+                    gen.writeStringField('name', 'members');                       
+                    gen.writeStringField('type', 'complex');   
+                    gen.writeBooleanField('multiValued', false); 
+                    gen.writeStringField('description', 'The members of the group');                   
+
+                    gen.writeStringField('mutability', 'readWrite');                            
+                    gen.writeBooleanField('required', false);     
+                    gen.writeFieldName('subAttributes');
+                    gen.writeStartArray();
+                        gen.writeStartObject();
+                            gen.writeStringField('name', 'value');                       
+                            gen.writeStringField('type', 'string');   
+                            gen.writeStringField('description', 'The id of the member');                   
+                            gen.writeStringField('mutability', 'readWrite');                            
+                            gen.writeBooleanField('required', false);                             
+                            gen.writeBooleanField('caseExact', false); 
+                        gen.writeEndObject();  
+                        gen.writeStartObject();
+                            gen.writeStringField('name', 'type');                       
+                            gen.writeStringField('type', 'string');   
+                            gen.writeStringField('description', 'The type of membership of the member in the group');                   
                             gen.writeStringField('mutability', 'readOnly');                             
                             gen.writeBooleanField('required', true);                             
                             gen.writeBooleanField('caseExact', false); 
-                        gen.writeEndObject();     
-                        //displayName
+                        gen.writeEndObject();  
+                    gen.writeEndArray();                                                     
+                gen.writeEndObject();
+            gen.writeEndArray();
+                gen.writeFieldName('meta');
+                    gen.writeStartObject();
+                        gen.writeStringField('resourceType', 'Schema');
+                        gen.writeStringField('location', base + path + 'Schemas/Groupsurn:ietf:params:scim:schemas:core:2.0:Group');
+                    gen.writeEndObject();
+            if (totalResults > 1){
+                    gen.writeEndObject();  
+            }
+            }
+        
+        if (doEntitlement){
+            if (totalResults > 1){
+                gen.writeStartObject();
+            }
+            gen.writeStringField('id', 'urn:salesforce:schemas:extension:1.0:Entitlement'); 
+                gen.writeStringField('name', 'Entitlement');   
+                gen.writeStringField('description', 'Schema resource for representing entitlements');               
+                gen.writeStringField('schema', 'urn:salesforce:schemas:extension:1.0:Entitlement');               
+                gen.writeStringField('endpoint', '/Entitlements');   
+                gen.writeFieldName('attributes');
+                gen.writeStartArray(); 
+                    gen.writeStartObject();
+                        gen.writeStringField('name', 'id');                       
+                        gen.writeStringField('type', 'string');   
+                        gen.writeBooleanField('multiValued', false); 
+                        gen.writeStringField('description', 'Unique identifier for the SCIM resource as defined by the Service Provider.');                   
+                        gen.writeStringField('mutability', 'readOnly');                             
+                        gen.writeBooleanField('required', true);                             
+                        gen.writeBooleanField('caseExact', false); 
+                    gen.writeEndObject();     
+                    //displayName
+                    gen.writeStartObject();
+                        gen.writeStringField('name', 'displayName');                       
+                        gen.writeStringField('type', 'string');   
+                        gen.writeBooleanField('multiValued', false); 
+                        gen.writeStringField('description', 'The name of the Entitlement, suitable for display');                   
+                        gen.writeStringField('mutability', 'readOnly');                            
+                        gen.writeBooleanField('required', false); 
+                        gen.writeBooleanField('caseExact', false); 
+                    gen.writeEndObject();
+                    gen.writeStartObject();
+                        gen.writeStringField('name', 'type');                       
+                        gen.writeStringField('type', 'string');   
+                        gen.writeBooleanField('multiValued', false); 
+                        gen.writeStringField('description', 'The type of entitlment');                   
+                        gen.writeStringField('mutability', 'readOnly');                            
+                        gen.writeBooleanField('required', false); 
+                        gen.writeBooleanField('caseExact', false); 
+                    gen.writeEndObject();
+                    gen.writeStartObject();
+                        gen.writeStringField('name', 'members');                       
+                        gen.writeStringField('type', 'complex');   
+                        gen.writeBooleanField('multiValued', true); 
+                        gen.writeStringField('description', 'The members associated with the entitlement');                   
+    
+                        gen.writeStringField('mutability', 'readWrite');                            
+                        gen.writeBooleanField('required', false);     
+                        gen.writeFieldName('subAttributes');
+                        gen.writeStartArray();
+                            gen.writeStartObject();
+                                gen.writeStringField('name', 'value');                       
+                                gen.writeStringField('type', 'string');   
+                                gen.writeStringField('description', 'The id of the member');                   
+                                gen.writeStringField('mutability', 'readWrite');                            
+                                gen.writeBooleanField('required', false);                             
+                                gen.writeBooleanField('caseExact', false); 
+                            gen.writeEndObject();  
+                            gen.writeStartObject();
+                                gen.writeStringField('name', 'display');                       
+                                gen.writeStringField('type', 'string');   
+                                gen.writeStringField('description', 'The name of the member');                   
+                                gen.writeStringField('mutability', 'readOnly');                             
+                                gen.writeBooleanField('required', true);                             
+                                gen.writeBooleanField('caseExact', false); 
+                            gen.writeEndObject();  
+                        gen.writeEndArray();                                                     
+                    gen.writeEndObject();
+                gen.writeEndArray();
+                gen.writeFieldName('meta');
+                    gen.writeStartObject();
+                        gen.writeStringField('resourceType', 'Schema');
+                        gen.writeStringField('location', base + path + 'Schemas/urn:salesforce:schemas:extension:1.0:Entitlement');
+                    gen.writeEndObject();
+    
+            if (totalResults > 1){
+                    gen.writeEndObject();  
+            }
+                                                
+        }   
+        
+        if (doRole){
+            if (totalResults > 1){
+                gen.writeStartObject();
+            }
+
+            gen.writeStringField('id', 'urn:salesforce:schemas:extension:1.0:Role'); 
+            gen.writeStringField('name', 'Role');   
+            gen.writeStringField('description', 'Schema resource for representing roles');               
+            gen.writeStringField('schema', 'urn:salesforce:schemas:extension:1.0:Role');               
+            gen.writeStringField('endpoint', '/Roles');   
+            gen.writeFieldName('attributes');
+            gen.writeStartArray(); 
+                gen.writeStartObject();
+                    gen.writeStringField('name', 'id');                       
+                    gen.writeStringField('type', 'string');   
+                    gen.writeBooleanField('multiValued', false); 
+                    gen.writeStringField('description', 'Unique identifier for the SCIM resource as defined by the Service Provider.');                   
+                    gen.writeStringField('mutability', 'readOnly');                             
+                    gen.writeBooleanField('required', true);                             
+                    gen.writeBooleanField('caseExact', false); 
+                gen.writeEndObject();     
+                //displayName
+                gen.writeStartObject();
+                    gen.writeStringField('name', 'displayName');                       
+                    gen.writeStringField('type', 'string');   
+                    gen.writeBooleanField('multiValued', false); 
+                    gen.writeStringField('description', 'The name of the Role, suitable for display');                   
+                    gen.writeStringField('mutability', 'readOnly');                            
+                    gen.writeBooleanField('required', false); 
+                    gen.writeBooleanField('caseExact', false); 
+                gen.writeEndObject();
+                gen.writeStartObject();
+                    gen.writeStringField('name', 'members');                       
+                    gen.writeStringField('type', 'complex');   
+                    gen.writeBooleanField('multiValued', true); 
+                    gen.writeStringField('description', 'The members associated with the entitlement');                   
+                    gen.writeStringField('mutability', 'readOnly');                            
+                    gen.writeBooleanField('required', false);     
+                    gen.writeFieldName('subAttributes');
+                    gen.writeStartArray();
                         gen.writeStartObject();
-                            gen.writeStringField('name', 'displayName');                       
+                            gen.writeStringField('name', 'value');                       
                             gen.writeStringField('type', 'string');   
-                            gen.writeBooleanField('multiValued', false); 
-                            gen.writeStringField('description', 'The name of the Role, suitable for display');                   
+                            gen.writeStringField('description', 'The id of the member');                   
                             gen.writeStringField('mutability', 'readOnly');                            
-                            gen.writeBooleanField('required', false); 
+                            gen.writeBooleanField('required', false);                             
                             gen.writeBooleanField('caseExact', false); 
-                        gen.writeEndObject();
-                        gen.writeStartObject();
-                            gen.writeStringField('name', 'members');                       
-                            gen.writeStringField('type', 'complex');   
-                            gen.writeBooleanField('multiValued', true); 
-                            gen.writeStringField('description', 'The members associated with the entitlement');                   
-                            gen.writeStringField('mutability', 'readOnly');                            
-                            gen.writeBooleanField('required', false);     
-                            gen.writeFieldName('subAttributes');
-                            gen.writeStartArray();
-                                gen.writeStartObject();
-                                    gen.writeStringField('name', 'value');                       
-                                    gen.writeStringField('type', 'string');   
-                                    gen.writeStringField('description', 'The id of the member');                   
-                                    gen.writeStringField('mutability', 'readOnly');                            
-                                    gen.writeBooleanField('required', false);                             
-                                    gen.writeBooleanField('caseExact', false); 
-                                gen.writeEndObject();  
-                            gen.writeEndArray();                                                     
-                        gen.writeEndObject();
+                        gen.writeEndObject();  
+                    gen.writeEndArray();                                                     
+                gen.writeEndObject();
+            gen.writeEndArray();
+            gen.writeFieldName('meta');
+                gen.writeStartObject();
+                    gen.writeStringField('location', base + path + 'Schemas/urn:salesforce:schemas:extension:1.0:Role');
+                    gen.writeStringField('resourceType', 'Schema');
+                gen.writeEndObject();
+
+            if (totalResults > 1){
+                    gen.writeEndObject();  
+            }
+                                           
+        }          
+
+        if (doEnterprise) {
+            if (totalResults > 1){
+                gen.writeStartObject();
+            }
+
+                gen.writeStringField('id', 'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'); 
+                gen.writeStringField('name', 'Enterprise User');   
+                gen.writeStringField('description', 'Schema resource for representing Enterprise User');               
+                gen.writeStringField('schema', 'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User');               
+                gen.writeStringField('endpoint', '/Users');   
+                gen.writeFieldName('attributes');
+                gen.writeStartArray();             
+                     gen.writeStartObject();
+                        gen.writeStringField('name', 'organization');                       
+                        gen.writeStringField('type', 'string');   
+                        gen.writeStringField('description', 'The organization the user belongs to');                  
+                        gen.writeStringField('mutability', 'readOnly');                             
+                        gen.writeBooleanField('required', true);                             
+                        gen.writeBooleanField('caseExact', false); 
+                    gen.writeEndObject();
+                    gen.writeStartObject();
+                        gen.writeStringField('name', 'employeeNumber');                       
+                        gen.writeStringField('type', 'string');   
+                        gen.writeStringField('description', 'The employee number of the user');             
+                        gen.writeStringField('mutability', 'readWrite');                            
+                        gen.writeBooleanField('required', false);                             
+                        gen.writeBooleanField('caseExact', false); 
+                    gen.writeEndObject();
+                    gen.writeStartObject();
+                        gen.writeStringField('name', 'division');                       
+                        gen.writeStringField('type', 'string');   
+                        gen.writeStringField('description', 'The division of the user');             
+                        gen.writeStringField('mutability', 'readWrite');                            
+                        gen.writeBooleanField('required', false);                             
+                        gen.writeBooleanField('caseExact', false); 
+                    gen.writeEndObject();  
+                    gen.writeStartObject();
+                        gen.writeStringField('name', 'department');                       
+                        gen.writeStringField('type', 'string');   
+                        gen.writeStringField('description', 'The department of the user');             
+                        gen.writeStringField('mutability', 'readWrite');                            
+                        gen.writeBooleanField('required', false);                             
+                        gen.writeBooleanField('caseExact', false); 
+                    gen.writeEndObject();
+                    gen.writeStartObject();
+                        gen.writeStringField('name', 'manager');                       
+                        gen.writeStringField('type', 'complex');   
+                        gen.writeStringField('description', 'The manager of the user');             
+                        gen.writeStringField('mutability', 'readWrite');                            
+                        gen.writeBooleanField('required', false);                             
+                        gen.writeBooleanField('caseExact', false); 
+                        gen.writeFieldName('subAttributes');
+                        gen.writeStartArray();
+                             gen.writeStartObject();
+                                gen.writeStringField('name', 'value');                       
+                                gen.writeStringField('type', 'string');   
+                                gen.writeStringField('description', 'The id of the manager user');                  
+                                gen.writeStringField('mutability', 'readWrite');                            
+                                gen.writeBooleanField('required', false);                             
+                                gen.writeBooleanField('caseExact', false); 
+                            gen.writeEndObject();
+                            gen.writeStartObject();
+                                gen.writeStringField('name', 'displayName');                       
+                                gen.writeStringField('type', 'string');   
+                                gen.writeStringField('description', 'The display name of the manager user');             
+                                gen.writeStringField('mutability', 'readOnly');                             
+                                gen.writeBooleanField('required', false);                             
+                                gen.writeBooleanField('caseExact', false); 
+                            gen.writeEndObject();
+                        gen.writeEndArray();
+                    gen.writeEndObject();
+                    gen.writeStartObject();
+                        gen.writeStringField('name', 'delegatedApprover');                       
+                        gen.writeStringField('type', 'complex');   
+                        gen.writeStringField('description', 'The delegated approver of the user');             
+                        gen.writeStringField('mutability', 'readWrite');                            
+                        gen.writeBooleanField('required', false);                             
+                        gen.writeBooleanField('caseExact', false); 
+                        gen.writeFieldName('subAttributes');
+                        gen.writeStartArray();
+                             gen.writeStartObject();
+                                gen.writeStringField('name', 'delegatedApproverId');                       
+                                gen.writeStringField('type', 'string');   
+                                gen.writeStringField('description', 'The id of the delegated approver user');                  
+                                gen.writeStringField('mutability', 'readWrite');                            
+                                gen.writeBooleanField('required', false);                             
+                                gen.writeBooleanField('caseExact', false); 
+                            gen.writeEndObject();
+                            gen.writeStartObject();
+                                gen.writeStringField('name', 'displayName');                       
+                                gen.writeStringField('type', 'string');   
+                                gen.writeStringField('description', 'The display name of the delegated approver user');             
+                                gen.writeStringField('mutability', 'readOnly');                             
+                                gen.writeBooleanField('required', false);                             
+                                gen.writeBooleanField('caseExact', false); 
+                            gen.writeEndObject();
+                        gen.writeEndArray();
+                    gen.writeEndObject();                                                                                                                                                                               
+            
+            gen.writeEndArray();
+            gen.writeFieldName('meta');
+                gen.writeStartObject();
+                    gen.writeStringField('location', base + path + 'Schemas/urn:ietf:params:scim:schemas:extension:enterprise:2.0:User');
+                    gen.writeStringField('resourceType', 'Schema');
+                gen.writeEndObject();
+
+            if (totalResults > 1){
+                    gen.writeEndObject();  
+            }
+                                                  
+
+        }
+        
+        if (doExternal) {
+            if (totalResults > 1){
+                gen.writeStartObject();
+            }
+
+                gen.writeStringField('id', 'urn:salesforce:schemas:extension:external:1.0');                       
+                gen.writeStringField('name', 'urn:salesforce:schemas:extension:external:1.0');                       
+                gen.writeStringField('type', 'complex');   
+                gen.writeStringField('description', 'Salesforce external users extensions');                   
+                gen.writeStringField('schema', 'urn:salesforce:schemas:extension:external:1.0');
+                gen.writeStringField('endpoint', '/Users');   
+                gen.writeFieldName('attributes');
+                gen.writeStartArray();
+                     gen.writeStartObject();
+                        gen.writeStringField('name', 'accountId');                       
+                        gen.writeStringField('type', 'string');   
+                        gen.writeStringField('description', 'The account the external user is associated to');                  
+                        gen.writeStringField('mutability', 'readOnly');                             
+                        gen.writeBooleanField('required', true);                             
+                        gen.writeBooleanField('caseExact', false); 
+                    gen.writeEndObject();
+                    gen.writeStartObject();
+                        gen.writeStringField('name', 'contactId');                       
+                        gen.writeStringField('type', 'string');   
+                        gen.writeStringField('description', 'The contact record the external user is associated to');             
+                        gen.writeStringField('mutability', 'readWrite');                            
+                        gen.writeBooleanField('required', false);                             
+                        gen.writeBooleanField('caseExact', false); 
+                    gen.writeEndObject();
+                gen.writeEndArray();                                                        
+            
+                gen.writeFieldName('meta');
+                gen.writeStartObject();
+                    gen.writeStringField('location', base + path + 'Schemas/urn:ietf:params:scim:schemas:extension:enterprise:2.0:User');
+                    gen.writeStringField('resourceType', 'Schema');
+                gen.writeEndObject();
+            
+            if (totalResults > 1){
+                    gen.writeEndObject();  
+            }
+                                                                                              
+
+        }
+
+        if (doOrgCustom){
+            if (totalResults > 1){
+                gen.writeStartObject();
+            }
+
+                    gen.writeStringField('id', 'urn:salesforce:schemas:extension:' + UserInfo.getOrganizationId());                       
+                    gen.writeStringField('name', 'urn:salesforce:schemas:extension:' + UserInfo.getOrganizationId());                       
+                    gen.writeStringField('type', 'complex');   
+                    gen.writeStringField('description', 'All extension custom fields for a user in the organization');                   
+                    gen.writeStringField('schema', 'urn:salesforce:schemas:extension:' + UserInfo.getOrganizationId());    
+                    gen.writeStringField('endpoint', '/Users');   
+                    gen.writeFieldName('attributes');
+                    gen.writeStartArray();
+                        Map<String, Schema.SObjectField> r = Schema.sObjectType.User.fields.getMap();
+                        for (String key : r.keySet()) {
+                            SObjectField thisField = r.get(key);
+                            DescribeFieldResult thisDescribeResult = thisField.getDescribe();
+                            if (thisDescribeResult.isCustom()) {
+                                 gen.writeStartObject();
+                                    gen.writeStringField('name', thisDescribeResult.getName());                       
+                                    gen.writeStringField('type', getScimTypeFromSoapType(thisDescribeResult.getSOAPType()));   
+                                    gen.writeStringField('description', thisDescribeResult.getInlineHelpText() + '');       // Description somehow not available from the sobject api.            
+                                    gen.writeBooleanField('readOnly', !thisDescribeResult.isUpdateable());                             
+                                    gen.writeBooleanField('required', !thisDescribeResult.isNillable());                             
+                                    gen.writeBooleanField('caseExact', thisDescribeResult.isCaseSensitive()); 
+                                gen.writeEndObject();         
+                            }
+                        }
                     gen.writeEndArray();
                     gen.writeFieldName('meta');
                         gen.writeStartObject();
+                            gen.writeStringField('location', base + path + 'urn:salesforce:schemas:extension:' + UserInfo.getOrganizationId());
                             gen.writeStringField('resourceType', 'Schema');
-                            gen.writeStringField('location', '/v2/Schemas/urn:salesforce:schemas:extension:1.0:Role');
-                        gen.writeEndObject();
+                        gen.writeEndObject();            
+            if (totalResults > 1){
+                    gen.writeEndObject();  
+            }
+                      
+        }        
+        
+        
+        if (totalResults > 1){
+            gen.writeEndArray();                        
+            gen.writeFieldName('meta');
+                gen.writeStartObject();
+                    gen.writeStringField('location', base + path + 'Schemas');
+                    gen.writeStringField('resourceType', 'ListResponse');
+                gen.writeEndObject();
+        }
 
-                gen.writeEndObject();                                                   
-
-        }          
-             gen.writeEndArray();
-        gen.writeEndObject();   
+            gen.writeEndObject();  
+ 
         return Blob.valueOf(gen.getAsString());
     }
     

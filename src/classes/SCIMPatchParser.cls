@@ -11,27 +11,30 @@ public class SCIMPatchParser {
         Map<String,Object> parsed = (Map<String, Object>)System.JSON.deserializeUntyped(json);
         List<Object> schemasObj = (List<Object>)parsed.get('schemas');
         List<Object> operationsObj = (List<Object>)parsed.get('Operations');
-		
+        
         schemas = new List<String>();
         Operations = new List<Operation>();       
         for (Object val : schemasObj){
-			schemas.add((String) val);
+            schemas.add((String) val);
         }
 
         for (Object val : (List<Object>)operationsObj) {
             Operation tempOp = new Operation();
-			Map<String, Object> tempObj = (Map<String, Object>) val;
-			tempOp.op = (String)tempObj.get('op');
-			tempOp.value = new List<Map<String, Object>>();
-            for (Object v : (List<Object>)tempObj.get('value')){
-                Map<String, Object> tempValues = (Map<String, Object>) v;
-                tempOp.value.add(tempValues);
-            }
-            
+            Map<String, Object> tempObj = (Map<String, Object>) val;
+            tempOp.op = (String)tempObj.get('op');
+            tempOp.value = new List<Map<String, Object>>();
+
             if (tempObj.get('path') != null){
                 tempOp.path = (String)tempObj.get('path');
-            }
+                Map<String, Object> tempV = new Map<String, Object>{'value' => tempObj.get('value')}; 
+                tempOp.value.add(tempV);
+            } else {
+                Map<String, Object> foo1 = (Map<String, Object>)tempObj.get('value');
+                for (String o1 : foo1.keySet()){
+                    tempOp.value.add(new Map<String, Object>{o1 => foo1.get(o1)});
+                }
+            }                      
             operations.add(tempOp);
-        }   
+        }
     }
 }

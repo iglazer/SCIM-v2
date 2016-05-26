@@ -37,7 +37,6 @@ global class RoleResource extends ScimResource {
         RestResponse res = RestContext.response;
         String[] uriParts = req.requestURI.split('/',0);
         Integer numParts = uriParts.size() - 1;   
-        
 		// clear assignments then doPatch
         UserRole[] r = Database.query('select id from userrole where id=\'' + uriParts[numParts] + '\'');
         if(r.size() == 1) {
@@ -297,8 +296,10 @@ global class RoleResource extends ScimResource {
                             gen.writeStringField('lastModified', lastmodFormated + 'Z');
                             
                             String base = URL.getSalesforceBaseUrl().toExternalForm();
-                            String path = '/services/apexrest/v2/Roles/' + r.id;
+                            String path = '/services/apexrest/scim/v2/Roles/' + r.id;
                             gen.writeStringField('location', base + path);
+                    
+                    		gen.writeStringField('resourceType', 'Role');
                             
                             Blob digest = Crypto.generateDigest('SHA-1',  Blob.valueOf(user.id + lastmodFormated));
                             gen.writeStringField('version', EncodingUtil.convertToHex(digest));                                        
@@ -311,8 +312,7 @@ global class RoleResource extends ScimResource {
     public static boolean shouldSerialize(String attributeName, String attributes) {
         return ScimResource.shouldSerialize(attributeName, attributes, RolesResource.scimNameToRoleSObjectNameMap);
     }  
-
-    
+   
     global static void doGet(String id, String attributes, boolean isPost) {
         RestRequest req = RestContext.request;
         RestResponse res = RestContext.response;
@@ -376,12 +376,14 @@ global class RoleResource extends ScimResource {
         } 
         
         String[] uriParts = req.requestURI.split('/',0);
-        Integer numParts = uriParts.size() - 1;   
-        if (numParts >= 4) { 
+        Integer numParts = uriParts.size() - 1;
+        if (numParts > 4) { 
             res.statusCode = 404;
             res.responseBody = SCIMError.serializeError(res.statusCode, 'No such resource.', req.headers.containsKey('X-Prettyprint'));
-        } else {
+        } else if (numParts == 4) {
             doGet(uriParts[numParts], attributes, false);   
+        } else if (numParts == 3) {
+            RolesResource.doGet();
         }
     }
 }

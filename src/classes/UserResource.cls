@@ -4,6 +4,7 @@ global with sharing class UserResource extends ScimResource {
     final private static Map<String, Schema.SOAPType> customFieldToSoapTypeMap;
     
     final private static String enterpriseExtensionURN = 'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User';
+    final private static String externalSchemaURN = 'urn:salesforce:schemas:extension:external:1.0';
     final private static String orgId = UserInfo.getOrganizationId();
     
     final private static Set<String> portalUserTypes = new Set<String>();
@@ -56,17 +57,19 @@ global with sharing class UserResource extends ScimResource {
         // profileUrl - should this be URL to user object
         
         // enterprise extensions
+        scimNameToUserSObjectNameMap.put(enterpriseExtensionURN, new StandardAttributeProcessor('organization,employeeNumber,Division,Department,ManagerId,Manager.Name', null, true));
         scimNameToUserSObjectNameMap.put(enterpriseExtensionURN, new StandardAttributeProcessor('employeeNumber,Division,Department,ManagerId,Manager.Name', null, true));
-        scimNameToUserSObjectNameMap.put(enterpriseExtensionURN + '.employeeNumber', new StandardAttributeProcessor('employeeNumber', Schema.SOAPType.String, false));
-        scimNameToUserSObjectNameMap.put(enterpriseExtensionURN + '.division', new StandardAttributeProcessor('Division', Schema.SOAPType.String, false));
-        scimNameToUserSObjectNameMap.put(enterpriseExtensionURN + '.department', new StandardAttributeProcessor('Department', Schema.SOAPType.String, false));
+        scimNameToUserSObjectNameMap.put(enterpriseExtensionURN + ':organization', new StandardAttributeProcessor('organization', Schema.SOAPType.String, false));
+        scimNameToUserSObjectNameMap.put(enterpriseExtensionURN + ':employeeNumber', new StandardAttributeProcessor('employeeNumber', Schema.SOAPType.String, false));
+        scimNameToUserSObjectNameMap.put(enterpriseExtensionURN + ':division', new StandardAttributeProcessor('Division', Schema.SOAPType.String, false));
+        scimNameToUserSObjectNameMap.put(enterpriseExtensionURN + ':department', new StandardAttributeProcessor('Department', Schema.SOAPType.String, false));
         
-        scimNameToUserSObjectNameMap.put(enterpriseExtensionURN + '.delegatedApprover', new StandardAttributeProcessor('DelegatedApproverId', Schema.SOAPType.String, true));
-        scimNameToUserSObjectNameMap.put(enterpriseExtensionURN + '.delegatedApprover.delegatedApproverId', new StandardAttributeProcessor('DelegatedApproverId', Schema.SOAPType.String, false));
+        scimNameToUserSObjectNameMap.put(enterpriseExtensionURN + ':delegatedApprover', new StandardAttributeProcessor('DelegatedApproverId', Schema.SOAPType.String, true));
+        scimNameToUserSObjectNameMap.put(enterpriseExtensionURN + ':delegatedApprover.delegatedApproverId', new StandardAttributeProcessor('DelegatedApproverId', Schema.SOAPType.String, false));
         
-        scimNameToUserSObjectNameMap.put(enterpriseExtensionURN + '.manager', new StandardAttributeProcessor('ManagerId,Manager.Name', Schema.SOAPType.String, true));
-        scimNameToUserSObjectNameMap.put(enterpriseExtensionURN + '.manager.managerId', new StandardAttributeProcessor('ManagerId', Schema.SOAPType.String, false));
-        scimNameToUserSObjectNameMap.put(enterpriseExtensionURN + '.manager.displayName', new StandardAttributeProcessor('Manager.Name', Schema.SOAPType.String, false));
+        scimNameToUserSObjectNameMap.put(enterpriseExtensionURN + ':manager', new StandardAttributeProcessor('ManagerId,Manager.Name', Schema.SOAPType.String, true));
+        scimNameToUserSObjectNameMap.put(enterpriseExtensionURN + ':manager.value', new StandardAttributeProcessor('ManagerId', Schema.SOAPType.String, false));
+        scimNameToUserSObjectNameMap.put(enterpriseExtensionURN + ':manager.displayName', new StandardAttributeProcessor('Manager.Name', Schema.SOAPType.String, false));
         
         // Org may not have Chatter
         if (isFieldAccessible('FullPhotoUrl') && isFieldAccessible('SmallPhotoUrl')) {        
@@ -87,12 +90,12 @@ global with sharing class UserResource extends ScimResource {
                 String customField = thisDescribeResult.getName();
                 customFields = customFields + customField + ',';
                 customFieldToSoapTypeMap.put(thisDescribeResult.getName(), thisDescribeResult.getSOAPType());
-                scimNameToUserSObjectNameMap.put('urn:salesforce:schemas:extension:' + orgId + '.' + customField, new StandardAttributeProcessor(customField, thisDescribeResult.getSOAPType(), false));
+                scimNameToUserSObjectNameMap.put('urn:salesforce:schemas:extension:' + orgId + ':' + customField, new StandardAttributeProcessor(customField, thisDescribeResult.getSOAPType(), false));
             }
         }
-    
+
         if (customFields.length() > 0) {
-            customFields = customFields.substring(0, (customFields.length() - 1));        
+            customFields = customFields.substring(0, (customFields.length() - 1));     
             scimNameToUserSObjectNameMap.put('urn:salesforce:schemas:extension:' + orgId, new StandardAttributeProcessor(customFields, null, true));
         }
         
@@ -252,14 +255,7 @@ global with sharing class UserResource extends ScimResource {
                 }
             }
             
-            if ( user.name != null) {
-                if (isUpdate) {
-                    if (user.name.containsKey('formatted') && ( user.name.get('formatted') != u.name)) {
-                        error += 'INVALID:name.formatted_is_read_only;';  
-                        res.statusCode = 500;
-                    }
-                }
-                
+            if ( user.name != null) {                
                 if (user.name.containsKey('familyName')) {
                     u.lastName = user.name.get('familyName');
                 } else {
@@ -285,12 +281,6 @@ global with sharing class UserResource extends ScimResource {
                 }
             }
 
-            if (isUpdate) {
-                if (( user.displayName != null)  && ( user.displayName != u.name)) {
-                    error += 'INVALID:displayName_is_read_only;';  
-                    res.statusCode = 500;
-                }
-            }
                             
             if (user.name != null && user.name.containsKey('familyName')) {
                 u.lastName = user.name.get('familyName');
@@ -303,19 +293,12 @@ global with sharing class UserResource extends ScimResource {
                         
             if ( user.nickName != null) {
                 u.communityNickname = user.nickName;
-                u.alias = user.nickName;
+                //u.alias = user.nickName;
             } else {
                 if ( isCreate ) {
                     String timeString = Datetime.now().getTime().format().replace(',','');
                     u.alias = timeString.substring(timeString.length() - 8, timeString.length());
                     u.communityNickname = user.userName;   
-                }
-            }
-
-            if (isUpdate) {
-                if (( user.profileUrl != null)  && ( user.profileUrl != 'https://' + req.headers.get('Host') + '/' + user.Id)) {                
-                    error += 'INVALID:profileUrl_is_read_only;';  
-                    res.statusCode = 500;
                 }
             }
             
@@ -351,15 +334,14 @@ global with sharing class UserResource extends ScimResource {
                     if (address.containsKey('region')) u.state = address.get('region');
                     if (address.containsKey('postalCode')) u.postalCode = address.get('postalCode');
                     if (address.containsKey('country')) u.country = address.get('country');
-                    if (address.containsKey('formatted')) {
-                        error += 'INVALID:addresses[].formatted_is_read_only;';  
-                        res.statusCode = 500;
-                    }
                 }
             }
             
             if ( user.phoneNumbers != null ) {
-                if ( !user.phoneNumbers.isEmpty()) {
+                if ( user.phoneNumbers.size() > 1) {
+                    error += 'INVALID:only_a_single_phone_is_allowed';
+                    res.statusCode = 500;
+                } else if ( user.phoneNumbers.size() == 1){
                     for (Map<String,String>phone : user.phoneNumbers) {
                         String val = null;
                         if (phone.containsKey('value')) val = phone.get('value');
@@ -376,20 +358,6 @@ global with sharing class UserResource extends ScimResource {
                 }
             }
             
-            if (isCreate) {
-                //TODO - diff the input
-                if ( (user.photos != null ) && (!user.photos.isEmpty()) ) {
-                    error += 'INVALID:photos[]_is_read_only;';  
-                    res.statusCode = 500;
-                }
-            }
-
-            if (isUpdate) {
-                if ( (user.userType != null ) && (user.userType != u.userType)) {
-                    error += 'INVALID:userType_is_read_only;';  
-                    res.statusCode = 500;
-                }
-            }
     
             if ( user.title != null) {
                 u.title = user.title;
@@ -615,12 +583,6 @@ global with sharing class UserResource extends ScimResource {
                 res.statusCode = 500;
             } 
             
-            if ( isUpdate ) {
-                if ( ( user.organization != null ) && ( user.organization != UserInfo.getOrganizationId())){
-                    error += 'INVALID:organization_is_read_only;';  
-                    res.statusCode = 500;
-                } 
-            }
             
             if ( user.division != null) {
                 u.division = user.division;
@@ -631,19 +593,11 @@ global with sharing class UserResource extends ScimResource {
             }
     
             if ( user.manager != null) {
-                if (user.manager.containsKey('managerId')) u.managerId = user.manager.get('managerId');
-                if (user.manager.containsKey('displayName')) {
-                    error += 'INVALID:manager.displayName_is_read_only;';  
-                    res.statusCode = 500;
-                }
+                if (user.manager.containsKey('value')) u.managerId = user.manager.get('value');
             }
             
             if ( user.delegatedApprover != null) {
                 if (user.delegatedApprover.containsKey('delegatedApproverId')) u.delegatedApproverId = user.delegatedApprover.get('delegatedApproverId');
-                if (user.delegatedApprover.containsKey('displayName')) {
-                    error += 'INVALID:delegatedApprover.displayName_is_read_only;';  
-                    res.statusCode = 500;
-                }
             }            
             
             if (user.customFieldValues != null) {
@@ -820,13 +774,14 @@ global with sharing class UserResource extends ScimResource {
                     res.statusCode = 200;
                 }    
                 
-                String soql = FilterTranslator.buildAttributeQueryString(null, 'id eq \"' + u.id + '\"', null, null, scimNameToUserSObjectNameMap, 'User', 'isActive = true', null, null).getActualQuery();
+                String attributes = req.params.get('attributes');
+                String soql = FilterTranslator.buildAttributeQueryString(attributes, 'id eq \"' + u.id + '\"', null, null, scimNameToUserSObjectNameMap, 'User', 'isActive = true', null, null).getActualQuery();
                 List<User> users = Database.query(soql);
                 if (!users.isEmpty()) {
                     // active could be set to false in which case will not return.
                     User uNew = users.get(0);
-                    res.addHeader('Location', 'https://' + req.headers.get('Host') + '/services/apexrest/scim/v2/Users/' + uNew.Id);    
-                    res.responseBody = UserResource.serializeUser(uNew,req.headers.get('Host'),req.headers.containsKey('X-Prettyprint'));
+                    res.addHeader('Location', 'https://' + req.headers.get('Host') + '/services/apexrest/scim/v2/Users/' + uNew.Id);  
+                    res.responseBody = UserResource.serializeUser(uNew, attributes, req.headers.get('Host'),req.headers.containsKey('X-Prettyprint'));
                 }
                 
                 // return to commit, anything else rolls back
@@ -862,7 +817,6 @@ global with sharing class UserResource extends ScimResource {
         }
 		
 
-        System.debug('Patched User: ' + user);
     }
     
     public static boolean isPortalType(String userType) {
@@ -874,12 +828,18 @@ global with sharing class UserResource extends ScimResource {
         Integer numParts = uriParts.size() - 1;          
         String host = req.headers.get('Host');
         
-        User[] u = Database.query('select id, isActive from user where id=\'' + uriParts[numParts] + '\'');
+        User[] u = Database.query('select id, username, CommunityNickname, isActive from user where id=\'' + uriParts[numParts] + '\'');
         if(u.size() == 1 && u[0].isActive) {
+            
             //TODO Add check for certain conditions that make delete not so simple
             //Matt to provide
 //            User[] userRefedBy = Database.query('select id from user where id=\'' + uriParts[numParts] + '\'');
-        	u[0].isActive = false;
+            u[0].isActive = false;
+            //added following for interop to pass soft delete-like tests
+            String tempUsername = 'X_' + u[0].username;
+            String tempNickname = 'X_' + u[0].CommunityNickname;
+            u[0].username = tempUsername;
+            u[0].CommunityNickname = tempNickname;
         	update u[0];
         	res.statusCode = 204;
         } else {
@@ -909,25 +869,9 @@ global with sharing class UserResource extends ScimResource {
     }       
 
     public static void serializeUserWithGenerator(List<User> users, String attributes, String host, JSONGenerator gen) {
-    
-        // bulk get delegated approvers' names
-        // This is quite silly, runtime enforcements prevent the field to be a group, (see W-1097715, CL 2154516)
-        // but the udd says the field is a fk to user/group
-        // which also prevents us from querying .delegatedApprover.Name
-        Set<Id> userApproverId = new Set<Id>();
-        Map<Id, User> userApproverMap = new Map<Id,User>();
-        if (shouldSerialize(enterpriseExtensionURN, attributes)) {
-            for (User thisUser : users) {
-                String delegatedApproverId = thisUser.delegatedApproverId;
-                if (delegatedApproverId != null && delegatedApproverId.startsWith('005')) {
-                    userApproverId.add(thisUser.delegatedApproverId);
-                }
-            }
-            userApproverMap = new Map<Id,User>([select Id, Name from User where Id in :userApproverId]);
-        }
-    	
+              
         // based $ref for all scim objects
-        String scimRef = host + '/services/apexrest/v2/';
+        String scimRef = host + '/services/apexrest/scim/v2/';
         
         // bulk get the psa assignments
         Map<Id, List<PermissionSetAssignment>> psaMap = new Map<Id, List<PermissionSetAssignment>>();
@@ -989,11 +933,13 @@ global with sharing class UserResource extends ScimResource {
                 gen.writeFieldName('schemas');
                 gen.writeStartArray();
                     gen.writeString('urn:ietf:params:scim:schemas:core:2.0:User');
-                    gen.writeString(enterpriseExtensionURN);
+                    if (shouldSerialize(enterpriseExtensionURN, attributes)) {
+                        gen.writeString(enterpriseExtensionURN);
+                    }
                     if (!customFieldMap.isEmpty()) {
                         gen.writeString('urn:salesforce:schemas:extension:' + UserInfo.getOrganizationId());
                     }
-                    if (hasExternalUserExtensions) {
+                    if (shouldSerialize(externalSchemaURN, attributes) && hasExternalUserExtensions) {
                         gen.writeString('urn:salesforce:schemas:extension:external:1.0');
                     }
                 gen.writeEndArray();
@@ -1157,42 +1103,80 @@ global with sharing class UserResource extends ScimResource {
                     gen.writeEndArray(); 
                 }        
                 
-    
                 if (shouldSerialize(enterpriseExtensionURN, attributes)) {
                     gen.writeFieldName(enterpriseExtensionURN);
                     gen.writeStartObject();
+                    if(shouldSerialize(enterpriseExtensionURN + ':organization', attributes)){
                         gen.writeStringField('organization', UserInfo.getOrganizationId());
-                        if (user.employeeNumber != null) gen.writeStringField('employeeNumber', user.employeeNumber);
+                    }
+
+                    if(shouldSerialize(enterpriseExtensionURN + ':division', attributes)){
                         if (user.Division != null) gen.writeStringField('division', user.Division);
+                    }
+
+                    if(shouldSerialize(enterpriseExtensionURN + ':employeeNumber', attributes)){
+                        if (user.employeeNumber != null) gen.writeStringField('employeeNumber', user.employeeNumber);
+                    }
+
+                    if(shouldSerialize(enterpriseExtensionURN + ':department', attributes)){
                         if (user.Department != null) gen.writeStringField('department', user.Department);
+                    }
+
+                    if(shouldSerialize(enterpriseExtensionURN + ':manager', attributes)){
                         if (user.ManagerId != null) {
                             gen.writeFieldName('manager'); 
                             gen.writeStartObject();
-                                gen.writeStringField('managerId', user.managerId);
+                                gen.writeStringField('value', user.managerId);
                                 gen.writeStringField('$ref', '/Users/' + user.managerId);
-                            	gen.writeStringField('displayName', user.manager.Name);
+                                gen.writeStringField('displayName', user.manager.Name);
                             gen.writeEndObject();   
                         }
-                        if (user.DelegatedApproverId != null) {
-                            gen.writeFieldName('delegatedApprover'); 
-                            gen.writeStartObject();
-                                gen.writeStringField('delegatedApproverId', user.delegatedApproverId);
-                                gen.writeStringField('$ref', '/Users/' + user.delegatedApproverId);
-                            String delegatedApproverId = user.delegatedApproverId;
+                    }                    
+                    
+                    if(shouldSerialize(enterpriseExtensionURN + ':delegatedApprover', attributes)){
+                        // bulk get delegated approvers' names
+                        // This is quite silly, runtime enforcements prevent the field to be a group, (see W-1097715, CL 2154516)
+                        // but the udd says the field is a fk to user/group
+                        // which also prevents us from querying .delegatedApprover.Name
+                        Set<Id> userApproverId = new Set<Id>();
+                        Map<Id, User> userApproverMap = new Map<Id,User>();
+                        if (shouldSerialize(enterpriseExtensionURN, attributes)) {
+                            for (User thisUser : users) {
+                                String delegatedApproverId = thisUser.delegatedApproverId;
                                 if (delegatedApproverId != null && delegatedApproverId.startsWith('005')) {
-                                    gen.writeStringField('displayName', userApproverMap.get(user.delegatedApproverId).Name);
+                                    userApproverId.add(thisUser.delegatedApproverId);
                                 }
-                            gen.writeEndObject();   
-                        }                        
+                            }
+                            userApproverMap = new Map<Id,User>([select Id, Name from User where Id in :userApproverId]);
+                        }
+                        
+                        if (user.DelegatedApproverId != null) {
+                                gen.writeFieldName('delegatedApprover'); 
+                                gen.writeStartObject();
+                                    gen.writeStringField('delegatedApproverId', user.delegatedApproverId);
+                                    gen.writeStringField('$ref', '/Users/' + user.delegatedApproverId);
+                                String delegatedApproverId = user.delegatedApproverId;
+                                    if (delegatedApproverId != null && delegatedApproverId.startsWith('005')) {
+                                        gen.writeStringField('displayName', userApproverMap.get(user.delegatedApproverId).Name);
+                                    }
+                                gen.writeEndObject();   
+                            }                        
+                    }
+
                         
                     gen.writeEndObject();    
                 }
                 
-                if (shouldSerialize('urn:salesforce:schemas:extension:external:1.0', attributes) && hasExternalUserExtensions) {
+                if (shouldSerialize(externalSchemaURN, attributes) && hasExternalUserExtensions) {
                     gen.writeFieldName('urn:salesforce:schemas:extension:external:1.0');
                     gen.writeStartObject();
-                        if (user.AccountId != null) gen.writeStringField('accountId', user.AccountId);
-                        if (user.ContactId != null) gen.writeStringField('contactId', user.ContactId);
+                        if(shouldSerialize(externalSchemaURN + ':accountId', attributes)){
+                            if (user.AccountId != null) gen.writeStringField('accountId', user.AccountId);
+                        }
+                        if(shouldSerialize(externalSchemaURN + ':contactId', attributes)){
+                            if (user.ContactId != null) gen.writeStringField('contactId', user.ContactId);
+                        }
+
                     gen.writeEndObject();    
                 }                    
                 
@@ -1227,6 +1211,8 @@ global with sharing class UserResource extends ScimResource {
                             
                             String path = '/services/apexrest/scim/v2/Users/' + user.id;
                             gen.writeStringField('location', base + path);
+                    
+                    		gen.writeStringField('resourceType', 'User');                    
                             
                             Blob digest = Crypto.generateDigest('SHA-1',  Blob.valueOf(user.id + lastmodFormated));
                             gen.writeStringField('version', EncodingUtil.convertToHex(digest));
@@ -1238,7 +1224,12 @@ global with sharing class UserResource extends ScimResource {
     
     public static boolean isValidId(String id) {
 //        return java:common.udd.Udd.isValidId(id); JUST FOR IAN
-	return true;
+        List<User> users = [select id from User where id =: id];
+        if (users.size() > 0) {
+            return true;
+        } else {
+            return false;
+        }
     }
    
     @HttpGet
@@ -1249,41 +1240,65 @@ global with sharing class UserResource extends ScimResource {
             String host = req.headers.get('Host');
             res.addHeader('Content-Type', 'application/json');
             String[] uriParts = req.requestURI.split('/',0);
-            Integer numParts = uriParts.size() - 1;
-                       
-            
+            Integer numParts = uriParts.size() - 1;           
+
             if (numParts >= 5) { // had to increase this is 5 because changed service url
                 res.statusCode = 404;
                 res.responseBody = SCIMError.serializeError(res.statusCode, 'No such resource', req.headers.containsKey('X-Prettyprint'));
             } else {
-            
-                List<User> users = new List<User>();
+                
                 String attributes = req.params.get('attributes');
                 if (attributes != null) {
                     attributes = attributes.replaceAll(' ', '');
                 }
-                
-                if(isValidId(uriParts[numParts]) || uriParts[numParts] == 'Me'){
-                	String userId;
+// isValidId only works if checked in                
+//                if(isValidId(uriParts[numParts]) || uriParts[numParts] == 'Me'){
+                if (uriParts[numParts] != 'Users' || uriParts[numParts] == 'Me'){ 
+
+                String userId;
                 	if (uriParts[numParts] == 'Me'){
                 		userId = UserInfo.getUserId();
                 	} else {
                 		userId = uriParts[numParts];
+                        if (!isValidId(uriParts[numParts])) {
+                            res.statusCode = 404;
+                            res.responseBody = SCIMError.serializeError(res.statusCode, 'No such resource', req.headers.containsKey('X-Prettyprint'));
+                            return;
+                        }
                 	}
-                    String soql = FilterTranslator.buildAttributeQueryString(attributes, 'id eq \"' + userId + '\"', null, null, scimNameToUserSObjectNameMap, 'User',  'isActive = true', null, null).getActualQuery();
+                    
+                    List<User> users = new List<User>();
+                    String filter = 'id eq \"' + userId + '\"';
+                    if (req.params.get('filter') != null ) {
+                        filter = '(id eq \"' + userId + '\") and ' + req.params.get('filter') ;
+                    }
+                    
+                    String soql = FilterTranslator.buildAttributeQueryString(attributes, filter, null, null, scimNameToUserSObjectNameMap, 'User',  'isActive = true', null, null).getActualQuery();
+                    System.debug(soql);
                     users = Database.query(soql);
-    
-                    if ( !users .isEmpty()  ) {
+
+                    if ( !users.isEmpty()  ) {
                         res.addHeader('Location', 'https://' + host + '/services/apexrest/scim/v2/Users/' + users.get(0).Id);   
                         res.statusCode = 200; 
                         res.responseBody = UserResource.serializeUser(users.get(0),attributes,host,req.headers.containsKey('X-Prettyprint'));
                     } else {
-                        res.statusCode = 404;
-                        res.responseBody = SCIMError.serializeError(res.statusCode, 'Resource https://' + host + '/services/apexrest/scim/v2/Users/' + uriParts[numParts] + ' not found', req.headers.containsKey('X-Prettyprint'));
+                        res.statusCode = 200;
+                        JSONGenerator gen = JSON.createGenerator(true);
+                        gen.writeStartObject();
+                            gen.writeNumberField('totalResults', 0);
+                            gen.writeNumberField('itemsPerPage', 0);                
+                            gen.writeNumberField('startIndex', 0);
+                            gen.writeFieldName('schemas');
+                            gen.writeStartArray();
+                                gen.writeString('urn:ietf:params:scim:api:messages:2.0:ListResponse');
+                            gen.writeEndArray();
+                        gen.writeEndObject();
+                        res.responseBody = Blob.valueOf(gen.getAsString()); 
                     }
                 } else {
-                    res.statusCode = 404;
-                    res.responseBody = SCIMError.serializeError(res.statusCode, 'Invalid Id', req.headers.containsKey('X-Prettyprint'));
+                    //res.statusCode = 404;
+                    //res.responseBody = SCIMError.serializeError(res.statusCode, 'Invalid Id', req.headers.containsKey('X-Prettyprint'));
+                    UsersResource.doGet();
                 }
             }
         }
@@ -1293,7 +1308,7 @@ global with sharing class UserResource extends ScimResource {
             return;
         }        
     }
-
+    
     @HttpPost
     global static void doPost() {
         RestRequest req = RestContext.request;
@@ -1321,8 +1336,8 @@ global with sharing class UserResource extends ScimResource {
         RestResponse res = RestContext.response;
         String[] uriParts = req.requestURI.split('/',0);
         Integer numParts = uriParts.size() - 1;
-           
-        if (numParts >= 4) { 
+
+        if (numParts > 4) { 
             res.statusCode = 404;
             res.responseBody = SCIMError.serializeError(res.statusCode, 'No such resource', req.headers.containsKey('X-Prettyprint'));
             return;
@@ -1411,18 +1426,15 @@ global with sharing class UserResource extends ScimResource {
 
         String[] uriParts = req.requestURI.split('/',0);
         Integer numParts = uriParts.size() - 1;           
-        if (numParts >= 4) { 
+        if (numParts >= 5) { 
             res.statusCode = 404;
             res.responseBody = SCIMError.serializeError(res.statusCode, 'No such resource', req.headers.containsKey('X-Prettyprint'));
             return;
         }                 
 
         User user = [ Select ID, Username, IsActive from User where Id = :uriParts[numParts]];
-		User tempUser = new User();
+        User tempUser = new User();
         tempUser.id = user.Id;
-        //doCreateOrUpdate(req, res, user, 'PATCH');
-        // Old approach
-        //doPatch(req, res, user);
         
         SCIMPatchParser userPP = new SCIMPatchParser(req.requestBody.toString());
         String schema = userPP.schemas.get(0);
@@ -1434,15 +1446,15 @@ global with sharing class UserResource extends ScimResource {
         
         Savepoint sp = Database.setSavepoint();
         try {
-			for (SCIMPatchParser.Operation op : userPP.operations){
-				String operation = op.op;
-				String path = op.path;
-				Set<String> values = new Set<String>();
+            for (SCIMPatchParser.Operation op : userPP.operations){
+                String operation = op.op;
+                String path = op.path;
+                Set<String> values = new Set<String>();
 
                 if (path == null) {
                     for (Map<String, Object> val : op.value){
                         for (String key : val.keySet()){
-							// check key for validity
+                // check key for validity
                             if ((!isUnsupported(key)) && (!isReadOnly(key))) {
                                 // key = givenName / firstName
                                 if ((key == 'givenName') && (operation == 'remove')) {
@@ -1557,7 +1569,7 @@ global with sharing class UserResource extends ScimResource {
                                 // groups
                                 if (key == 'groups') {
                                     List<GroupMember> groupsToProcess = new List<GroupMember>();
-									// there has got to be a better way to get the size here but object conversion was driving me crazy
+                                    // there has got to be a better way to get the size here but object conversion was driving me crazy
                                     List<Object> groupList = (List<Object>)val.get(key);                                    
                                     if (groupList.size() != 0 ){
                                         for (Object g : (List<Object>) val.get(key)){
@@ -1602,7 +1614,7 @@ global with sharing class UserResource extends ScimResource {
                                     List<Object> entsList = (List<Object>)val.get(key);
                                     if (entsList.size() != 0){
                                         for (Object entIter : (List<Object>) val.get(key)){
-											Map<String, Object> tempEntObj = (Map<String, Object>) entIter;
+                                            Map<String, Object> tempEntObj = (Map<String, Object>) entIter;
                                             tempEntId = (String) tempEntobj.get('id');
                                             if (tempEntId.startsWith('00e')) {
                                                 profileToProcess.add(tempEntId);
@@ -1694,7 +1706,7 @@ global with sharing class UserResource extends ScimResource {
                 } else {
                     // check path for validity
                     if ((!isUnsupported(path)) && (!isReadOnly(path))) {
-						// path = givenName / firstName
+                        // path = givenName / firstName
                         if (((path == 'givenName') || (path == 'name.givenName')) && (operation == 'remove')) {
                             tempUser.firstname = null;
                         } else if ((path == 'givenName') || (path == 'name.givenName')){
@@ -1707,8 +1719,8 @@ global with sharing class UserResource extends ScimResource {
                         } else if ((path == 'givenName') || (path == 'name.familyName')){
                             tempUser.lastname = (String) op.value[0].get('value');
                         }
-
-						// title
+                        
+                        // title
                         if ((path == 'title') && (operation == 'remove')) {
                             tempUser.title = null;
                         } else if (path == 'title'){
@@ -1825,7 +1837,7 @@ global with sharing class UserResource extends ScimResource {
                                 delete currentGroups;                                
                             }
                             if ((operation == 'add') || (operation == 'replace')){
-								insert groupsToProcess;
+                                insert groupsToProcess;
                             }
                         }
                         
@@ -1900,7 +1912,7 @@ global with sharing class UserResource extends ScimResource {
                                     e.setStatusCode(res.statusCode);
                                     throw e;
                                 }
-								
+
                                 // insert new permSets
                                 Database.SaveResult[] newSRs = Database.insert(permSetsToProcess, false);
                                 for (Database.SaveResult thisSR : newSRs) {
