@@ -68,6 +68,8 @@ global class RolesResource {
             
             if ( !roles.isEmpty()  ) {
                 res.responseBody = serializeRoles(roles, total, startIndex, count, attributes, host,req.headers.containsKey('X-Prettyprint'));
+            } else {
+                res.responseBody = serializeRoles(null,0,null,null,null,host,req.headers.containsKey('X-Prettyprint'));
             }
         }
         catch (Exception ex) {
@@ -86,7 +88,7 @@ global class RolesResource {
                 Integer countInt = Math.min(Integer.valueof(count), roles.size());
                 gen.writeNumberField('itemsPerPage', countInt);
             } 
-            else if (total != roles.size()) {
+            else if ((total != 0) && (total != roles.size())) {
                 gen.writeNumberField('itemsPerPage', roles.size());
             }
             
@@ -100,7 +102,10 @@ global class RolesResource {
             gen.writeEndArray();
             gen.writeFieldName('Resources');
             gen.writeStartArray();
-                RoleResource.serializeRoleWithGenerator(roles, attributes, host, gen);
+            if (roles != null) {
+                RoleResource.serializeRoleWithGenerator(roles, attributes, host, gen);           
+            }
+ 
             gen.writeEndArray();
         gen.writeEndObject();
         return Blob.valueOf(gen.getAsString());
