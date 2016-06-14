@@ -52,9 +52,9 @@ global class ResourceTypeResource {
         JSONGenerator gen = JSON.createGenerator(prettyPrint);
         gen.writeStartObject();
         if (totalResults > 1){
-            gen.writeStringField('totalResults', totalResults.format());
-            gen.writeStringField('itemsPerPage', totalResults.format());
-            gen.writeStringField('startIndex', '1');
+            gen.writeNumberField('totalResults', totalResults);
+            gen.writeNumberField('itemsPerPage', totalResults);
+            gen.writeNumberField('startIndex', 1);
         
             gen.writeFieldName('schemas');
                 gen.writeStartArray();

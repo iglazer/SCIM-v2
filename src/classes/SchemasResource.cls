@@ -93,9 +93,9 @@ global class SchemasResource {
         JSONGenerator gen = JSON.createGenerator(prettyPrint);
         gen.writeStartObject();
         if (totalResults > 1){
-            gen.writeStringField('totalResults', totalResults.format());
-            gen.writeStringField('itemsPerPage', totalResults.format());
-            gen.writeStringField('startIndex', '1');
+            gen.writeNumberField('totalResults', totalResults);
+            gen.writeNumberField('itemsPerPage', totalResults);
+            gen.writeNumberField('startIndex', 1);
             gen.writeFieldName('schemas');
                 gen.writeStartArray();
                 gen.writeString('urn:ietf:params:scim:api:messages:2.0:ListResponse');
