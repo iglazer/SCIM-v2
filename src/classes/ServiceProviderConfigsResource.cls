@@ -23,7 +23,7 @@ global class ServiceProviderConfigsResource {
                 gen.writeString('urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig');
             gen.writeEndArray();
             
-            gen.writeStringField('documentationUrl', 'https://help.salesforce.com/HTViewHelpDoc?id=identity_scim_overview.htm');   
+            gen.writeStringField('documentationUri', 'https://help.salesforce.com/HTViewHelpDoc?id=identity_scim_overview.htm');   
         
             gen.writeFieldName('patch');
             gen.writeStartObject();
@@ -64,8 +64,8 @@ global class ServiceProviderConfigsResource {
                 	gen.writeStringField('type', 'oauth2');
                     gen.writeStringField('name', 'OAuth v2.0');                       
                     gen.writeStringField('description', 'Authentication Scheme using the OAuth Standard');   
-                    gen.writeStringField('specUrl', 'http://tools.ietf.org/html/rfc6749');                                         
-                    gen.writeStringField('documentationUrl', 'https://help.salesforce.com/apex/HTViewHelpDoc?id=remoteaccess_authenticate.htm');                         
+                    gen.writeStringField('specUri', 'http://tools.ietf.org/html/rfc6749');                                         
+                    gen.writeStringField('documentationUri', 'https://help.salesforce.com/apex/HTViewHelpDoc?id=remoteaccess_authenticate.htm');                         
                     gen.writeBooleanField('primary', true); 
                 gen.writeEndObject();
              gen.writeEndArray();  
