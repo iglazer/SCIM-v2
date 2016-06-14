@@ -175,9 +175,7 @@ public class FilterTranslator {
     public static QueryHolder buildAttributeQueryString(String attributes, String filter, String startIndex, String count, Map<String, ScimSoqlAttributeProcessor> scimNameToSObjectNameMap, String table, String extraClause, String limitOverride, String offsetOverride) {
         Set<String> uniqueSObjectFieldNames = new Set<String>();
         String soql = 'select ';
-        for (String k : scimNameToSObjectNameMap.keySet()){
-            System.debug(k);
-        }
+
         if (attributes != null) {
             String[] attrs = attributes.split(',');
             for (String attr : attrs) {
@@ -210,6 +208,128 @@ public class FilterTranslator {
                 soql = soql + uniqueSObjectFileName + ',';
             } 
         }
+        System.debug('soql: ' + soql);
+        
+        // remove ending comma if any
+        if (soql.endsWith(',')) {
+            soql = soql.substring(0, soql.length() -1);
+        }
+        
+        String countSoql;
+        if (extraClause != null) {
+            soql += ' from ' + table + ' where ( ' + extraClause + ' ) ';
+            countSoql = 'select count(Id) from ' + table + ' where ( ' + extraClause + ' ) ';
+        }
+        else {
+            soql += ' from ' + table;
+            countSoql = 'select count(Id) count from ' + table + ' '; 
+        }
+        
+        if (filter != NULL && filter.length() != 0) {
+            FilterTranslator translator = new FilterTranslator(filter, scimNameToSObjectNameMap);
+            String thisFilter = ' AND ( ' + translator.getTranslatedFilter() + ' ) '; 
+            soql += thisFilter;
+            countSoql += thisFilter;
+        }
+        
+        soql += ' ORDER BY ID ';
+        
+        String noPagingSoql = soql;
+
+        Integer lim = NULL;
+        if (limitOverride != NULL) {
+            soql += ' LIMIT ' + limitOverride;
+        }
+        else {
+            if (count != NULL) {
+                validateCount(count);
+                lim = Integer.valueof(count);
+                soql += ' LIMIT ' + count;
+            }
+            else {
+                // Never pull back more than 200
+                soql += ' LIMIT 200 ';
+            }
+        }
+        
+        Integer offset = NULL;
+        if (offsetOverride != NULL) {
+            soql += ' OFFSET ' + offsetOverride;
+        }
+        else {
+            if (startIndex != NULL) {
+                validateStartIndex(startIndex);
+                offset = Integer.valueof(startIndex) - 1;
+                soql += ' OFFSET ' + offset;
+            }
+        }
+        return new QueryHolder(countSoql, soql, noPagingSoql, lim, offset);
+    }
+    
+    public static QueryHolder buildAttributeQueryStringWithExcluded(String attributes, String excludedAttributes, String filter, String startIndex, String count, Map<String, ScimSoqlAttributeProcessor> scimNameToSObjectNameMap, String table, String extraClause, String limitOverride, String offsetOverride) {
+        Set<String> uniqueSObjectFieldNames = new Set<String>();
+        Set<String> excludedeSObjectFieldNames = new Set<String>();
+        String soql = 'select ';
+
+        if (attributes != null) {
+            String[] attrs = attributes.split(',');
+            for (String attr : attrs) {
+                // hack to avoid organization from entering the query string
+                if(attr == 'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:organization') {
+                    break;
+                }
+                ScimSoqlAttributeProcessor attrProcessor = scimNameToSObjectNameMap.get(attr); 
+                if (attrProcessor == null) {
+                    throw new IllegalFilterEXception('Unsupported attribute: ' + attr);
+                }
+                String name = attrProcessor.getSoqlAttribute();
+                if (name != null) {
+                    uniqueSObjectFieldNames.addAll(attrProcessor.getSoqlAttributeList());
+                }
+            }
+        } else {
+            for (String key : scimNameToSObjectNameMap.keyset()) {
+                ScimSoqlAttributeProcessor attrProcessor = scimNameToSObjectNameMap.get(key);
+                String name = attrProcessor.getSoqlAttribute();
+                if ((name != null) && (name != 'organization')) {
+                    uniqueSObjectFieldNames.addAll(attrProcessor.getSoqlAttributeList());
+                }
+            }
+        }
+
+        if (excludedAttributes != null){
+            String[] exAttrs = excludedAttributes.split(',');
+            System.debug('exAttrs: ' + exAttrs);
+            for (string attr : exAttrs){
+                System.debug('attr: ' + attr);
+                
+                // hack to avoid organization from entering the query string
+                if(attr == 'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:organization') {
+                    break;
+                }
+
+                ScimSoqlAttributeProcessor attrProcessor = scimNameToSObjectNameMap.get(attr);
+                System.debug('attrProcessor: ' + attrProcessor);
+                System.debug('attrProcessor SOQL attr: ' + attrProcessor.getSoqlAttribute());
+
+                if (attrProcessor == null) {
+                    throw new IllegalFilterEXception('Unsupported attribute: ' + attr);
+                }
+                String name = attrProcessor.getSoqlAttribute();
+                if (name != null) {
+                    excludedeSObjectFieldNames.add(attrProcessor.getSoqlAttribute());
+                }
+            }
+            uniqueSObjectFieldNames.removeAll(excludedeSObjectFieldNames);            
+        }
+
+
+        for (String uniqueSObjectFileName : uniqueSObjectFieldNames) {
+            if (uniqueSObjectFileName.length() != 0) {
+                soql = soql + uniqueSObjectFileName + ',';
+            } 
+        }
+        System.debug('soql: ' + soql);
         
         // remove ending comma if any
         if (soql.endsWith(',')) {

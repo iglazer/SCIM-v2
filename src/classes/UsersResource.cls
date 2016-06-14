@@ -1,7 +1,7 @@
 @RestResource(urlMapping='/scim/v2/Users')
 global class UsersResource extends ScimResource {
 
-    private static Blob serializeUsers(List<User> users, Integer total, String startIndex, String count, String attributes, String host, boolean prettyPrint) {
+    private static Blob serializeUsers(List<User> users, Integer total, String startIndex, String count, String attributes, String excludedAttributes, String host, boolean prettyPrint) {
         JSONGenerator gen = JSON.createGenerator(prettyPrint);
         gen.writeStartObject();
             gen.writeNumberField('totalResults', total);
@@ -24,7 +24,7 @@ global class UsersResource extends ScimResource {
             gen.writeEndArray();
             gen.writeFieldName('Resources');
             gen.writeStartArray();
-                UserResource.serializeUserWithGenerator(users, attributes,host,gen);
+                UserResource.serializeUserWithGenerator(users, attributes, excludedAttributes, host,gen);
             gen.writeEndArray();
         gen.writeEndObject();
         return Blob.valueOf(gen.getAsString());
@@ -58,13 +58,19 @@ global class UsersResource extends ScimResource {
             } else {
 //            	attributes = 'id,meta';
             }
+            
+            String excludedAttributes = req.params.get('excludedAttributes');
+            if (excludedAttributes != null) {
+                excludedAttributes = excludedAttributes.replaceAll(' ', '');
+            }
 
             QueryHolder queryHolder = FilterTranslator.buildAttributeQueryString(attributes, filter, startIndex, count, UserResource.scimNameToUserSObjectNameMap, 'User',  'isActive = true', null, null);
+
             Integer total = ScimResource.countQuery(queryHolder.getCountQuery());
-        	users = Database.query(queryHolder.getActualQuery());
-        	
+            users = Database.query(queryHolder.getActualQuery());
+
             if (!users.isEmpty()) {
-                res.responseBody = serializeUsers(users, total, startIndex, count, attributes, host, req.headers.containsKey('X-Prettyprint'));        
+                res.responseBody = serializeUsers(users, total, startIndex, count, attributes, excludedAttributes, host, req.headers.containsKey('X-Prettyprint'));        
             } else {
                 res.statusCode = 200;
                 JSONGenerator gen = JSON.createGenerator(true);

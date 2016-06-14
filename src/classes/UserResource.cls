@@ -399,8 +399,8 @@ global with sharing class UserResource extends ScimResource {
                     u.put('userRoleId', user.roles.get(0).get('value'));
                 }
             }        
-			
-			// Profiles and Permission Sets
+
+            // Profiles and Permission Sets
             // PUT, PATCH, DELETE
             if ( user.entitlements != null && !user.entitlements.isEmpty() && !isCreate) {
                 // if patch and meta attributes includes entitlements then we have to clear psas and profile
@@ -515,7 +515,7 @@ global with sharing class UserResource extends ScimResource {
                     }
                 }
                 
-				List<GroupMember> existingGroups = [select Id, GroupId from GroupMember where UserOrGroupId = :u.id];
+                List<GroupMember> existingGroups = [select Id, GroupId from GroupMember where UserOrGroupId = :u.id];
                 List<GroupMember> toDeleteGMs = new List<GroupMember>();
                 Map<Id, GroupMember> existingIdToGroups = new Map<Id, GroupMember>();
                 for (GroupMember gm : existingGroups) {
@@ -741,8 +741,8 @@ global with sharing class UserResource extends ScimResource {
                             }
                         }                        
                     }
-					// now do Group assignments
-					List<GroupMember> updatedGMs = new List<GroupMember>();
+                    // now do Group assignments
+                    List<GroupMember> updatedGMs = new List<GroupMember>();
                     for (GroupMember gm : newGMs){
                         GroupMember tempGM = new GroupMember();
                         tempGM.GroupId = gm.GroupId;
@@ -775,13 +775,14 @@ global with sharing class UserResource extends ScimResource {
                 }    
                 
                 String attributes = req.params.get('attributes');
+                String excludedAttributes = req.params.get('excludedAttributes');
                 String soql = FilterTranslator.buildAttributeQueryString(attributes, 'id eq \"' + u.id + '\"', null, null, scimNameToUserSObjectNameMap, 'User', 'isActive = true', null, null).getActualQuery();
                 List<User> users = Database.query(soql);
                 if (!users.isEmpty()) {
                     // active could be set to false in which case will not return.
                     User uNew = users.get(0);
                     res.addHeader('Location', 'https://' + req.headers.get('Host') + '/services/apexrest/scim/v2/Users/' + uNew.Id);  
-                    res.responseBody = UserResource.serializeUser(uNew, attributes, req.headers.get('Host'),req.headers.containsKey('X-Prettyprint'));
+                    res.responseBody = UserResource.serializeUser(uNew, attributes, excludedAttributes, req.headers.get('Host'),req.headers.containsKey('X-Prettyprint'));
                 }
                 
                 // return to commit, anything else rolls back
@@ -815,8 +816,6 @@ global with sharing class UserResource extends ScimResource {
             res.statusCode = 500;
             error = e.getMessage();
         }
-		
-
     }
     
     public static boolean isPortalType(String userType) {
@@ -848,11 +847,11 @@ global with sharing class UserResource extends ScimResource {
         }
     }  
     
-    public static Blob serializeUser(User user, String attributes, String host, Boolean prettyPrint) {
+    public static Blob serializeUser(User user, String attributes, String excludedAttributes, String host, Boolean prettyPrint) {
         JSONGenerator gen = JSON.createGenerator(prettyPrint);
         List<User> users = new List<User>();
         users.add(user);
-        serializeUserWithGenerator(users,attributes,host,gen);
+        serializeUserWithGenerator(users,attributes,excludedAttributes,host,gen);
         return Blob.valueOf(gen.getAsString());
     }
     
@@ -860,7 +859,7 @@ global with sharing class UserResource extends ScimResource {
         JSONGenerator gen = JSON.createGenerator(prettyPrint);
         List<User> users = new List<User>();
         users.add(user);
-        serializeUserWithGenerator(users,null,host,gen);
+        serializeUserWithGenerator(users,null,null,host,gen);
         return Blob.valueOf(gen.getAsString());
     }
 
@@ -868,9 +867,18 @@ global with sharing class UserResource extends ScimResource {
         return ScimResource.shouldSerialize(attributeName, attributes, scimNameToUserSObjectNameMap);
     }       
 
-    public static void serializeUserWithGenerator(List<User> users, String attributes, String host, JSONGenerator gen) {
+    public static boolean shouldSerialize(String attributeName, String attributes, String excludedAttributes) {
+        return ScimResource.shouldSerializeWithExcluded(attributeName, attributes, excludedAttributes, scimNameToUserSObjectNameMap);
+    }        
+    
+    public static void serializeUserWithGenerator(List<User> users, String attributes, String host, JSONGenerator gen){
+        serializeUserWithGenerator(users, attributes, null, host, gen);
+    }
+    
+    public static void serializeUserWithGenerator(List<User> users, String attributes, String excludedAttributes, String host, JSONGenerator gen) {
               
         // based $ref for all scim objects
+        // bad practice right here
         String scimRef = host + '/services/apexrest/scim/v2/';
         
         // bulk get the psa assignments
@@ -944,25 +952,25 @@ global with sharing class UserResource extends ScimResource {
                     }
                 gen.writeEndArray();
                 gen.writeStringField('id', user.Id);
-                if ((shouldSerialize('userName', attributes)) && (user.Username != null)) gen.writeStringField('userName', user.Username);
-                if ((shouldSerialize('externalId', attributes))) {
+                if ((shouldSerialize('userName', attributes, excludedAttributes)) && (user.Username != null)) gen.writeStringField('userName', user.Username);
+                if ((shouldSerialize('externalId', attributes, excludedAttributes))) {
                     String federationIdentifier = (String) user.get('FederationIdentifier');
                     if (federationIdentifier != null) {
                         gen.writeStringField('externalId', federationIdentifier);
                     }
                 }
-                if (shouldSerialize('name', attributes)) {
+                if (shouldSerialize('name', attributes, excludedAttributes)) {
                     gen.writeFieldName('name');
                         gen.writeStartObject();
-                            if ((shouldSerialize('name.formatted', attributes)) && (user.Name != null))  gen.writeStringField('formatted', user.Name);
-                            if ((shouldSerialize('name.familyName', attributes)) && (user.Lastname != null)) gen.writeStringField('familyName', user.Lastname);
-                            if ((shouldSerialize('name.givenName', attributes)) && (user.Firstname != null)) gen.writeStringField('givenName', user.Firstname);
+                            if ((shouldSerialize('name.formatted', attributes, excludedAttributes)) && (user.Name != null))  gen.writeStringField('formatted', user.Name);
+                            if ((shouldSerialize('name.familyName', attributes, excludedAttributes)) && (user.Lastname != null)) gen.writeStringField('familyName', user.Lastname);
+                            if ((shouldSerialize('name.givenName', attributes, excludedAttributes)) && (user.Firstname != null)) gen.writeStringField('givenName', user.Firstname);
                         gen.writeEndObject();
                 }
-                if ((shouldSerialize('displayName', attributes)) && (user.Name != null)) gen.writeStringField('displayName', user.Name);
-                if ((shouldSerialize('nickName', attributes)) && (user.CommunityNickname != null)) gen.writeStringField('nickName', user.CommunityNickname);
-                if (shouldSerialize('profileUrl', attributes))  gen.writeStringField('profileUrl', 'https://' + host + '/' + user.Id);
-                if (shouldSerialize('emails', attributes)) {
+                if ((shouldSerialize('displayName', attributes, excludedAttributes)) && (user.Name != null)) gen.writeStringField('displayName', user.Name);
+                if ((shouldSerialize('nickName', attributes, excludedAttributes)) && (user.CommunityNickname != null)) gen.writeStringField('nickName', user.CommunityNickname);
+                if (shouldSerialize('profileUrl', attributes, excludedAttributes))  gen.writeStringField('profileUrl', 'https://' + host + '/' + user.Id);
+                if (shouldSerialize('emails', attributes, excludedAttributes)) {
                   gen.writeFieldName('emails');
                     gen.writeStartArray();
                         gen.writeStartObject();
@@ -972,7 +980,7 @@ global with sharing class UserResource extends ScimResource {
                         gen.writeEndObject();
                     gen.writeEndArray();
                 }
-                if (shouldSerialize('addresses', attributes)) { 
+                if (shouldSerialize('addresses', attributes, excludedAttributes)) { 
                 if  ((user.Street != null) || (user.City != null) || (user.State != null) || (user.postalCode != null) || (user.Country != null)) { 
                     gen.writeFieldName('addresses');
                         gen.writeStartArray();
@@ -1005,7 +1013,7 @@ global with sharing class UserResource extends ScimResource {
                     gen.writeEndArray();
                     }
                 }
-                if ((shouldSerialize('phoneNumbers', attributes)) &&  ((user.Phone != null) || (user.MobilePhone != null) || (user.Fax != null))) {    
+                if ((shouldSerialize('phoneNumbers', attributes, excludedAttributes)) &&  ((user.Phone != null) || (user.MobilePhone != null) || (user.Fax != null))) {    
                     gen.writeFieldName('phoneNumbers');
                         gen.writeStartArray();
                             if (user.Phone != null) {
@@ -1028,7 +1036,7 @@ global with sharing class UserResource extends ScimResource {
                             }
                         gen.writeEndArray();
                 }
-                if ((shouldSerialize('photos', attributes)) &&  ((user.FullPhotoUrl != null) || (user.SmallPhotoUrl != null))) {
+                if ((shouldSerialize('photos', attributes, excludedAttributes)) &&  ((user.FullPhotoUrl != null) || (user.SmallPhotoUrl != null))) {
                     gen.writeFieldName('photos');
                          gen.writeStartArray();
                             if (user.FullPhotoUrl != null) {
@@ -1045,13 +1053,13 @@ global with sharing class UserResource extends ScimResource {
                             }
                         gen.writeEndArray();
                 }    
-                if ((shouldSerialize('userType', attributes)) &&  (user.UserType != null)) gen.writeStringField('userType', user.UserType);
-                if ((shouldSerialize('title', attributes)) &&  (user.Title != null)) gen.writeStringField('title', user.Title);
-                if ((shouldSerialize('preferredLanguage', attributes)) &&  (user.LanguageLocaleKey != null)) gen.writeStringField('preferredLanguage', user.LanguageLocaleKey);
-                if ((shouldSerialize('locale', attributes)) &&  (user.LocaleSidKey != null)) gen.writeStringField('locale', user.LocaleSidKey);
-                if ((shouldSerialize('timezone', attributes)) &&  (user.TimeZoneSidKey != null)) gen.writeStringField('timezone', user.TimeZoneSidKey);
-                if ((shouldSerialize('active', attributes)) && (user.IsActive != null)) gen.writeBooleanField('active', user.IsActive);
-                if (shouldSerialize('entitlements', attributes)) {
+                if ((shouldSerialize('userType', attributes, excludedAttributes)) &&  (user.UserType != null)) gen.writeStringField('userType', user.UserType);
+                if ((shouldSerialize('title', attributes, excludedAttributes)) &&  (user.Title != null)) gen.writeStringField('title', user.Title);
+                if ((shouldSerialize('preferredLanguage', attributes, excludedAttributes)) &&  (user.LanguageLocaleKey != null)) gen.writeStringField('preferredLanguage', user.LanguageLocaleKey);
+                if ((shouldSerialize('locale', attributes, excludedAttributes)) &&  (user.LocaleSidKey != null)) gen.writeStringField('locale', user.LocaleSidKey);
+                if ((shouldSerialize('timezone', attributes, excludedAttributes)) &&  (user.TimeZoneSidKey != null)) gen.writeStringField('timezone', user.TimeZoneSidKey);
+                if ((shouldSerialize('active', attributes, excludedAttributes)) && (user.IsActive != null)) gen.writeBooleanField('active', user.IsActive);
+                if (shouldSerialize('entitlements', attributes, excludedAttributes)) {
                 gen.writeFieldName('entitlements');
                     gen.writeStartArray();
                         gen.writeStartObject();
@@ -1076,7 +1084,7 @@ global with sharing class UserResource extends ScimResource {
                     gen.writeEndArray(); 
                 }
             
-                if (shouldSerialize('groups', attributes)) {
+                if (shouldSerialize('groups', attributes, excludedAttributes)) {
                     List<GroupMember> memberships = gmMap.get(user.id);
                     gen.writeFieldName('groups');
                     gen.writeStartArray();
@@ -1092,7 +1100,7 @@ global with sharing class UserResource extends ScimResource {
                     gen.writeEndArray(); 
                 }        
                 
-                if (shouldSerialize('roles', attributes) && (user.userRoleId != null)) {
+                if (shouldSerialize('roles', attributes, excludedAttributes) && (user.userRoleId != null)) {
                     gen.writeFieldName('roles');
                     gen.writeStartArray();
                         gen.writeStartObject();
@@ -1103,26 +1111,26 @@ global with sharing class UserResource extends ScimResource {
                     gen.writeEndArray(); 
                 }        
                 
-                if (shouldSerialize(enterpriseExtensionURN, attributes)) {
+                if (shouldSerialize(enterpriseExtensionURN, attributes, excludedAttributes)) {
                     gen.writeFieldName(enterpriseExtensionURN);
                     gen.writeStartObject();
-                    if(shouldSerialize(enterpriseExtensionURN + ':organization', attributes)){
+                    if(shouldSerialize(enterpriseExtensionURN + ':organization', attributes, excludedAttributes)){
                         gen.writeStringField('organization', UserInfo.getOrganizationId());
                     }
 
-                    if(shouldSerialize(enterpriseExtensionURN + ':division', attributes)){
+                    if(shouldSerialize(enterpriseExtensionURN + ':division', attributes, excludedAttributes)){
                         if (user.Division != null) gen.writeStringField('division', user.Division);
                     }
 
-                    if(shouldSerialize(enterpriseExtensionURN + ':employeeNumber', attributes)){
+                    if(shouldSerialize(enterpriseExtensionURN + ':employeeNumber', attributes, excludedAttributes)){
                         if (user.employeeNumber != null) gen.writeStringField('employeeNumber', user.employeeNumber);
                     }
 
-                    if(shouldSerialize(enterpriseExtensionURN + ':department', attributes)){
+                    if(shouldSerialize(enterpriseExtensionURN + ':department', attributes, excludedAttributes)){
                         if (user.Department != null) gen.writeStringField('department', user.Department);
                     }
 
-                    if(shouldSerialize(enterpriseExtensionURN + ':manager', attributes)){
+                    if(shouldSerialize(enterpriseExtensionURN + ':manager', attributes, excludedAttributes)){
                         if (user.ManagerId != null) {
                             gen.writeFieldName('manager'); 
                             gen.writeStartObject();
@@ -1133,14 +1141,14 @@ global with sharing class UserResource extends ScimResource {
                         }
                     }                    
                     
-                    if(shouldSerialize(enterpriseExtensionURN + ':delegatedApprover', attributes)){
+                    if(shouldSerialize(enterpriseExtensionURN + ':delegatedApprover', attributes, excludedAttributes)){
                         // bulk get delegated approvers' names
                         // This is quite silly, runtime enforcements prevent the field to be a group, (see W-1097715, CL 2154516)
                         // but the udd says the field is a fk to user/group
                         // which also prevents us from querying .delegatedApprover.Name
                         Set<Id> userApproverId = new Set<Id>();
                         Map<Id, User> userApproverMap = new Map<Id,User>();
-                        if (shouldSerialize(enterpriseExtensionURN, attributes)) {
+                        if (shouldSerialize(enterpriseExtensionURN, attributes, excludedAttributes)) {
                             for (User thisUser : users) {
                                 String delegatedApproverId = thisUser.delegatedApproverId;
                                 if (delegatedApproverId != null && delegatedApproverId.startsWith('005')) {
@@ -1167,20 +1175,20 @@ global with sharing class UserResource extends ScimResource {
                     gen.writeEndObject();    
                 }
                 
-                if (shouldSerialize(externalSchemaURN, attributes) && hasExternalUserExtensions) {
+                if (shouldSerialize(externalSchemaURN, attributes, excludedAttributes) && hasExternalUserExtensions) {
                     gen.writeFieldName('urn:salesforce:schemas:extension:external:1.0');
                     gen.writeStartObject();
-                        if(shouldSerialize(externalSchemaURN + ':accountId', attributes)){
+                        if(shouldSerialize(externalSchemaURN + ':accountId', attributes, excludedAttributes)){
                             if (user.AccountId != null) gen.writeStringField('accountId', user.AccountId);
                         }
-                        if(shouldSerialize(externalSchemaURN + ':contactId', attributes)){
+                        if(shouldSerialize(externalSchemaURN + ':contactId', attributes, excludedAttributes)){
                             if (user.ContactId != null) gen.writeStringField('contactId', user.ContactId);
                         }
 
                     gen.writeEndObject();    
                 }                    
                 
-                if (shouldSerialize('urn:salesforce:schemas:extension:' + UserInfo.getOrganizationId(), attributes)) {
+                if (shouldSerialize('urn:salesforce:schemas:extension:' + UserInfo.getOrganizationId(), attributes, excludedAttributes)) {
                     if (!customFieldMap.isEmpty()) {    
                         gen.writeFieldName('urn:salesforce:schemas:extension:' + UserInfo.getOrganizationId());
                         gen.writeStartObject();
@@ -1194,7 +1202,7 @@ global with sharing class UserResource extends ScimResource {
                     }
                 }            
                 
-                if (shouldSerialize('meta', attributes)) {
+                if (shouldSerialize('meta', attributes, excludedAttributes)) {
                     gen.writeFieldName('meta');
                         gen.writeStartObject();
                             String createdFormated = user.CreatedDate.format('yyyy-MM-dd');
@@ -1211,8 +1219,7 @@ global with sharing class UserResource extends ScimResource {
                             
                             String path = '/services/apexrest/scim/v2/Users/' + user.id;
                             gen.writeStringField('location', base + path);
-                    
-                    		gen.writeStringField('resourceType', 'User');                    
+                gen.writeStringField('resourceType', 'User');                    
                             
                             Blob digest = Crypto.generateDigest('SHA-1',  Blob.valueOf(user.id + lastmodFormated));
                             gen.writeStringField('version', EncodingUtil.convertToHex(digest));
@@ -1251,8 +1258,20 @@ global with sharing class UserResource extends ScimResource {
                 if (attributes != null) {
                     attributes = attributes.replaceAll(' ', '');
                 }
-// isValidId only works if checked in                
-//                if(isValidId(uriParts[numParts]) || uriParts[numParts] == 'Me'){
+                
+                String excludedAttributes = req.params.get('excludedAttributes');
+                if (excludedAttributes != null) {
+                    excludedAttributes = excludedAttributes.replaceAll(' ', '');
+                }
+                
+                if ((attributes != null) && (excludedAttributes != null)){
+                    res.statusCode = 400;
+                    res.responseBody = SCIMError.serializeError(res.statusCode, 'Cannot provide both attributes and excludedAttributes', req.headers.containsKey('X-Prettyprint'));
+                    return;
+                }
+                                
+                // isValidId only works if checked in                
+                //if(isValidId(uriParts[numParts]) || uriParts[numParts] == 'Me'){
                 if (uriParts[numParts] != 'Users' || uriParts[numParts] == 'Me'){ 
 
                 String userId;
@@ -1273,14 +1292,15 @@ global with sharing class UserResource extends ScimResource {
                         filter = '(id eq \"' + userId + '\") and ' + req.params.get('filter') ;
                     }
                     
-                    String soql = FilterTranslator.buildAttributeQueryString(attributes, filter, null, null, scimNameToUserSObjectNameMap, 'User',  'isActive = true', null, null).getActualQuery();
+//                    String soql = FilterTranslator.buildAttributeQueryString(attributes, filter, null, null, scimNameToUserSObjectNameMap, 'User',  'isActive = true', null, null).getActualQuery();
+                    String soql = FilterTranslator.buildAttributeQueryStringWithExcluded(attributes, excludedAttributes, filter, null, null, scimNameToUserSObjectNameMap, 'User',  'isActive = true', null, null).getActualQuery();
                     System.debug(soql);
                     users = Database.query(soql);
 
                     if ( !users.isEmpty()  ) {
                         res.addHeader('Location', 'https://' + host + '/services/apexrest/scim/v2/Users/' + users.get(0).Id);   
                         res.statusCode = 200; 
-                        res.responseBody = UserResource.serializeUser(users.get(0),attributes,host,req.headers.containsKey('X-Prettyprint'));
+                        res.responseBody = UserResource.serializeUser(users.get(0),attributes,excludedAttributes,host,req.headers.containsKey('X-Prettyprint'));
                     } else {
                         res.statusCode = 200;
                         JSONGenerator gen = JSON.createGenerator(true);
@@ -1714,9 +1734,9 @@ global with sharing class UserResource extends ScimResource {
                         }
 
                         // familyName / lastName
-                        if (((path == 'givenName') || (path == 'name.familyName')) && (operation == 'remove')) {
+                        if (((path == 'familyName') || (path == 'name.familyName')) && (operation == 'remove')) {
                             tempUser.lastname = null;
-                        } else if ((path == 'givenName') || (path == 'name.familyName')){
+                        } else if ((path == 'familyName') || (path == 'name.familyName')){
                             tempUser.lastname = (String) op.value[0].get('value');
                         }
                         

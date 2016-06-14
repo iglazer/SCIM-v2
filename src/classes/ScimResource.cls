@@ -190,6 +190,95 @@ global abstract with sharing class ScimResource {
 
         return should;
     }
+
+    public static boolean shouldSerializeWithExcluded(String attributeName, String attributes, String excludedAttributes, Map<String, ScimSoqlAttributeProcessor> scimNameToSObjectNameMap) {
+        boolean should = true;
+        if (attributes == null && excludedAttributes == null) {
+            should = true;
+        } else if (excludedAttributes != null) {
+            should = true;
+            // check excluded first
+            // remember if there is a match then DO NOT serialize
+            // a.k.a. should = false
+            List<String> excludedAttributeList = excludedAttributes.split(',');
+            for (String thisAttribute : excludedAttributeList) {
+                System.debug('thisAttribute: ' + thisAttribute);
+                
+                //check for extended and custom schema
+                if (attributeName.contains(':')){
+                    if(thisAttribute.contains(attributeName)){
+                        should = false;
+                        break;
+                    }
+                }                 
+                
+                if (thisAttribute == attributeName){
+                    should = false;
+                    break;
+                }
+            }
+        } else if (attributes != null){
+            should = false;
+            // then check attributes
+            List<String> attributeList = attributes.split(',');
+            for (String thisAttribute : attributeList) {
+                
+                //check for extended and custom schema
+                if (attributeName.contains(':')){
+                    if(thisAttribute.contains(attributeName)){
+                        should = true;
+                        break;
+                    }
+                }
+                
+                List<String> renderingAttributeParts = attributeName.split('\\.');
+                List<String> thisAttributeParts = thisAttribute.split('\\.');
+                
+                // Check if we are trying to render a parent of a specified long sub notation 
+                // i.e. attributes = name.formatted, rendering name
+                if (renderingAttributeParts.size() <= thisAttributeParts.size()) {
+                    boolean isSubNotation = true;
+                    for (Integer i = 0; i < renderingAttributeParts.size(); i++) {
+                        if (renderingAttributeParts.get(i) != thisAttributeParts.get(i)) {
+                            isSubNotation = false;
+                            break;
+                        }
+                    }
+                    
+                    if (isSubNotation) {
+                        should = true;
+                        break;
+                    }
+                }
+                
+                // Check if we are trying to render a child of a specified parent
+                // i.e. attributes = name, rendering name.formatted
+                if (thisAttributeParts.size() <= renderingAttributeParts.size()) {
+                    boolean isParentNotation = true;
+                    
+                    for (Integer i = 0; i < thisAttributeParts.size(); i++) {
+                        if (renderingAttributeParts.get(i) != thisAttributeParts.get(i)) {
+                            isParentNotation = false;
+                            break;
+                        }
+                    }
+                    
+                    if (isParentNotation) {
+                        should = true;
+                        break;
+                    }
+                }
+            }            
+        }
+        System.debug('should was: ' + should + ' for: ' + attributeName);
+        
+        if (should) {
+            boolean containsKey = scimNameToSObjectNameMap.containsKey(attributeName);
+            return containsKey;
+        }
+
+        return should;
+    }
     
     public static Integer countQuery(String aggrSoql) {
         List<AggregateResult> s = Database.query(aggrSoql);

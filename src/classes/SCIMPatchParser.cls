@@ -1,6 +1,6 @@
 public class SCIMPatchParser {
     public List<String> schemas;
-	public List<Operation> Operations;
+    public List<Operation> Operations;
 
     public class Operation {
         public String op;
@@ -29,10 +29,16 @@ public class SCIMPatchParser {
                 Map<String, Object> tempV = new Map<String, Object>{'value' => tempObj.get('value')}; 
                 tempOp.value.add(tempV);
             } else {
-                Map<String, Object> foo1 = (Map<String, Object>)tempObj.get('value');
-                for (String o1 : foo1.keySet()){
-                    tempOp.value.add(new Map<String, Object>{o1 => foo1.get(o1)});
+                List<Map<String, Object>> foo1 = (List<Map<String, Object>>)tempObj.get('value');
+                for (Map<string, Object> f : foo1){
+                    System.debug('listf: ' + f);
                 }
+/*
+                for (String o1 : foo1.keySet()){
+                   // tempOp.value.add(new Map<String, Object>{o1 => foo1.get(o1)});
+                   System.debug('O1: '+ o1);
+                }
+*/
             }                      
             operations.add(tempOp);
         }
