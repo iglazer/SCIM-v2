@@ -75,18 +75,19 @@ public class FilterTranslator {
                 }
             }
             else if (state == 1) {
-                if (token.equals('eq') || 
-                    token.equals('co') ||
-                    token.equals('sw') ||
-                    token.equals('gt') ||
-                    token.equals('ge') ||
-                    token.equals('lt') ||
-                    token.equals('le')) {
-                        operator = token;                    
+                String tempToken = token.toLowerCase(); // did this to support case insensitive operators
+                if (tempToken.equals('eq') || 
+                    tempToken.equals('co') ||
+                    tempToken.equals('sw') ||
+                    tempToken.equals('gt') ||
+                    tempToken.equals('ge') ||
+                    tempToken.equals('lt') ||
+                    tempToken.equals('le')) {
+                        operator = tempToken;                    
                         state = 2;
                         continue;
                 }
-                else if (token.equals('pr')) {
+                else if (tempToken.equals('pr')) {
                     parsedString += currentProcessor.getPRclause(null);
                     state = 3;
                     continue;
