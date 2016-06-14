@@ -70,7 +70,6 @@ global class GroupResource extends ScimResource {
 		try {
 			for (SCIMPatchParser.Operation op : groupPP.Operations){
 		        String operation = op.op;
-                System.debug('entering op loop for op: ' + operation);
                 // Group Patch expects either path=members
                 // or a value value of "members":"ID"
                 // everything else will not be parsed
@@ -98,18 +97,15 @@ global class GroupResource extends ScimResource {
 				if (operation == 'replace'){
                     List<GroupMember> groupMember = [Select Id from GroupMember where groupId = :groupId];
                     if (!groupMember.isEmpty()) {
-                        System.debug('deleting following group member for replace: ' + groupMember);
                         Database.delete(groupMember, true);
                     }                                    
 				} else if (operation == 'add' || operation == 'replace') {
 					for (GroupMember member : groupMembersToBeProcessed){
-                        System.debug('added following member (add and replace): ' + member);
                         insert member;
                     }
 	                res.statusCode = 204;                            
 				} else if (operation == 'remove'){
 					for (GroupMember member : groupMembersToBeProcessed){
-                        System.debug('removed member: ' + member);
                         GroupMember tempGM = new GroupMember();
                         tempGM = [select Id from GroupMember where groupId = :member.GroupId and UserOrGroupId = :member.UserOrGroupId limit 1];
                         Database.delete(tempGM, true);

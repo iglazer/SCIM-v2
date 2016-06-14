@@ -51,9 +51,11 @@ global class GroupsResource {
             
             Integer total = ScimResource.countQuery(countSoql);
             List<Group> groups = Database.query(actualSoql);
-            
+
             if ( !groups.isEmpty()  ) {
                 res.responseBody = serializeGroups(groups, total, startIndex, count, attributes, host,req.headers.containsKey('X-Prettyprint'));
+            } else {
+                res.responseBody = serializeGroups(null,0,null,null,null,host,req.headers.containsKey('X-Prettyprint'));
             }
         }
         catch (Exception ex) {
@@ -72,13 +74,13 @@ global class GroupsResource {
                 Integer countInt = Math.min(Integer.valueof(count), groups.size());
                 gen.writeNumberField('itemsPerPage', countInt);
             } 
-            else if (total != groups.size()) {
+            else if ((total != 0) && (total != groups.size())) {
                 gen.writeNumberField('itemsPerPage', groups.size());
             }
-            
+        
             if (startIndex != null) {
                 gen.writeNumberField('startIndex', Integer.valueof(startIndex));
-            }            
+            }           
             
             gen.writeFieldName('schemas');
             gen.writeStartArray();
@@ -86,7 +88,9 @@ global class GroupsResource {
             gen.writeEndArray();
             gen.writeFieldName('Resources');
             gen.writeStartArray();
-                GroupResource.serializeGroupWithGenerator(groups, attributes, host, gen);
+            if (groups != null) {
+               GroupResource.serializeGroupWithGenerator(groups, attributes, host, gen);
+            }
             gen.writeEndArray();
         gen.writeEndObject();
         return Blob.valueOf(gen.getAsString());
