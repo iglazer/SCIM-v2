@@ -64,7 +64,8 @@ global class UsersResource extends ScimResource {
                 excludedAttributes = excludedAttributes.replaceAll(' ', '');
             }
 
-            QueryHolder queryHolder = FilterTranslator.buildAttributeQueryString(attributes, filter, startIndex, count, UserResource.scimNameToUserSObjectNameMap, 'User',  'isActive = true', null, null);
+//            QueryHolder queryHolder = FilterTranslator.buildAttributeQueryString(attributes, filter, startIndex, count, UserResource.scimNameToUserSObjectNameMap, 'User',  'isActive = true', null, null);
+            QueryHolder queryHolder = FilterTranslator.buildAttributeQueryStringWithExcluded(attributes, excludedAttributes, filter, startIndex, count, UserResource.scimNameToUserSObjectNameMap, 'User',  'isActive = true', null, null);
 
             Integer total = ScimResource.countQuery(queryHolder.getCountQuery());
             users = Database.query(queryHolder.getActualQuery());

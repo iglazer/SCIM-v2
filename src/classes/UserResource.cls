@@ -203,7 +203,19 @@ global with sharing class UserResource extends ScimResource {
             }             
         }     
     }
-    
+    @HttpPost
+    global static void doPost() {
+        RestRequest req = RestContext.request;
+        RestResponse res = RestContext.response;
+        String method = req.headers.get('X-HTTP-Method-Override');
+        if ( method == null ) method = 'POST';
+        if ( method.equals('DELETE') ) {
+            doDelete(req,res); 
+        }else {
+            User user = new User();
+            doCreateOrUpdate(req, res, user, method); 
+        }
+    }     
     public static void doCreateOrUpdate(RestRequest req, RestResponse res, User u, String operation) {
         Boolean isCreate = ( operation == 'POST' );
         Boolean isUpdate =  ( operation == 'PUT' );
@@ -839,11 +851,11 @@ global with sharing class UserResource extends ScimResource {
             String tempNickname = 'X_' + u[0].CommunityNickname;
             u[0].username = tempUsername;
             u[0].CommunityNickname = tempNickname;
-        	update u[0];
-        	res.statusCode = 204;
+            update u[0];
+            res.statusCode = 204;
         } else {
-        	res.statusCode = 404;
-			res.responseBody = SCIMError.serializeError(res.statusCode, 'Resource https://' + host + '/services/apexrest/scim/v2/Users/' + uriParts[numParts] + ' not found', req.headers.containsKey('X-Prettyprint'));
+            res.statusCode = 404;
+            res.responseBody = SCIMError.serializeError(res.statusCode, 'Resource https://' + host + '/services/apexrest/scim/v2/Users/' + uriParts[numParts] + ' not found', req.headers.containsKey('X-Prettyprint'));
         }
     }  
     
@@ -1294,7 +1306,6 @@ global with sharing class UserResource extends ScimResource {
                     
 //                    String soql = FilterTranslator.buildAttributeQueryString(attributes, filter, null, null, scimNameToUserSObjectNameMap, 'User',  'isActive = true', null, null).getActualQuery();
                     String soql = FilterTranslator.buildAttributeQueryStringWithExcluded(attributes, excludedAttributes, filter, null, null, scimNameToUserSObjectNameMap, 'User',  'isActive = true', null, null).getActualQuery();
-                    System.debug(soql);
                     users = Database.query(soql);
 
                     if ( !users.isEmpty()  ) {
@@ -1329,20 +1340,7 @@ global with sharing class UserResource extends ScimResource {
         }        
     }
     
-    @HttpPost
-    global static void doPost() {
-        RestRequest req = RestContext.request;
-        RestResponse res = RestContext.response;
-        String method = req.headers.get('X-HTTP-Method-Override');
-        if ( method == null ) method = 'POST';
-        if ( method.equals('DELETE') ) {
-            doDelete(req,res); 
-        }else {
-            User user = new User();
-            doCreateOrUpdate(req, res, user, method); 
-        }
-    }    
-    
+ 
     @HttpDelete
     global static void doDelete() {
         RestRequest req = RestContext.request;
@@ -1414,14 +1412,14 @@ global with sharing class UserResource extends ScimResource {
     }
    
     public static Map<String, String> setResponse (String errorType, String attrName, String errorString, String responseCode){
-		Map<String, String> response = new Map<String, String>();
-		response.put('statusCode', responseCode);
+        Map<String, String> response = new Map<String, String>();
+        response.put('statusCode', responseCode);
         response.put('errorString', errorType + ' ' + attrName + ' ' + errorString);
         return response;
     }
  
     public static boolean isUnsupported (String attr) {
-		Boolean result = false;
+        Boolean result = false;
         if (unsupportedAttrs.contains(attr)) {
             result = true;
         }
@@ -1429,7 +1427,7 @@ global with sharing class UserResource extends ScimResource {
     }
     
     public static boolean isReadOnly (String attr) {
-		Boolean result = false;
+        Boolean result = false;
         if (readOnlyAttrs.contains(attr)) {
             result = true;
         }
