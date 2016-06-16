@@ -87,8 +87,5 @@ global class ServiceProviderConfigsResource {
         return Blob.valueOf(gen.getAsString());
     
     }
-    
-    
-
 
 }

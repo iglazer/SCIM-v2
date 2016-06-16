@@ -51,16 +51,21 @@ public class FilterTranslator {
         // 3 = end of expression
         // ) [passthrough, decrease nest] -> 0
         // and|or [passthrough] -> 0
-           
         Integer state = 0;
         for (String token : tokens) {
             if (state == 0) {
+                System.debug('state: ' + state);
                 if (token.equals('(')) {
                     parsedString += '(';
                     nest++;
                     continue;
                 }
-                else if (attributes.containsKey(token)) {
+                else if (token == 'emails.value'){
+                    currentProcessor = attributes.get('emails');
+                    parsedString += currentProcessor.getSoqlAttributeForFilterGeneration();
+                    state = 1;
+                    continue;
+                } else if (attributes.containsKey(token)) {
                     currentProcessor = attributes.get(token);
                     if (currentProcessor.isComplex()) {
                         // composite attribute, need to be more specific.
@@ -69,8 +74,9 @@ public class FilterTranslator {
                     parsedString += currentProcessor.getSoqlAttributeForFilterGeneration();
                     state = 1;
                     continue;
-                }
-                else {
+                } 
+
+                else {                    
                     throw new IllegalFilterException('Unsupported attribute : ' + token);
                 }
             }
@@ -104,7 +110,7 @@ public class FilterTranslator {
                 else {
                     strippedToken = token.substring(1,token.length()-1);
                 }
-                   
+                
                 if (operator.equals('eq')) {
                     if (currentProcessor.isSemijoin()) {
                         semiJoinCount++;
@@ -143,6 +149,7 @@ public class FilterTranslator {
                 }
             }
             else if (state == 3) {
+                System.debug('state: ' + state);
                 currentProcessor = null;    // clear processor
                 token = token.toLowercase();
                 if (token.equals('and') || token.equals('or')) {
@@ -160,19 +167,20 @@ public class FilterTranslator {
                 }
             }
         }
-        
+
+
         if (nest != 0) {
             throw new IllegalFilterException('Unbalanced brackets, check your filter');
         }
         
         if (semijoinCount > 1) {
             throw new IllegalFilterException('Only one membership criteria allowed in filter.');        
-        }
-                
+        }        
         return parsedString;
     }
     
     public static QueryHolder buildAttributeQueryString(String attributes, String filter, String startIndex, String count, Map<String, ScimSoqlAttributeProcessor> scimNameToSObjectNameMap, String table, String extraClause, String limitOverride, String offsetOverride) {
+        
         Set<String> uniqueSObjectFieldNames = new Set<String>();
         String soql = 'select ';
 
@@ -183,6 +191,7 @@ public class FilterTranslator {
                 if(attr == 'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:organization') {
                     break;
                 }
+                
                 ScimSoqlAttributeProcessor attrProcessor = scimNameToSObjectNameMap.get(attr); 
                 if (attrProcessor == null) {
                     throw new IllegalFilterEXception('Unsupported attribute: ' + attr);
@@ -208,8 +217,7 @@ public class FilterTranslator {
                 soql = soql + uniqueSObjectFileName + ',';
             } 
         }
-        System.debug('soql: ' + soql);
-        
+
         // remove ending comma if any
         if (soql.endsWith(',')) {
             soql = soql.substring(0, soql.length() -1);
@@ -278,6 +286,7 @@ public class FilterTranslator {
                 if(attr == 'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:organization') {
                     break;
                 }
+
                 ScimSoqlAttributeProcessor attrProcessor = scimNameToSObjectNameMap.get(attr); 
                 if (attrProcessor == null) {
                     throw new IllegalFilterEXception('Unsupported attribute: ' + attr);
@@ -329,7 +338,6 @@ public class FilterTranslator {
                 soql = soql + uniqueSObjectFileName + ',';
             } 
         }
-        System.debug('soql: ' + soql);
         
         // remove ending comma if any
         if (soql.endsWith(',')) {
@@ -348,7 +356,8 @@ public class FilterTranslator {
         
         if (filter != NULL && filter.length() != 0) {
             FilterTranslator translator = new FilterTranslator(filter, scimNameToSObjectNameMap);
-            String thisFilter = ' AND ( ' + translator.getTranslatedFilter() + ' ) '; 
+            System.debug('pre-getTranslatedFilter');
+            String thisFilter = ' AND ( ' + translator.getTranslatedFilter() + ' ) ';
             soql += thisFilter;
             countSoql += thisFilter;
         }
@@ -384,6 +393,8 @@ public class FilterTranslator {
                 soql += ' OFFSET ' + offset;
             }
         }
+        
+
         return new QueryHolder(countSoql, soql, noPagingSoql, lim, offset);
     }
     
