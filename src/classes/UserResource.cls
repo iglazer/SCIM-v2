@@ -52,7 +52,7 @@ global with sharing class UserResource extends ScimResource {
         scimNameToUserSObjectNameMap.put('preferredLanguage', new StandardAttributeProcessor('LanguageLocaleKey', Schema.SOAPType.String, false));
         scimNameToUserSObjectNameMap.put('locale', new StandardAttributeProcessor('LocaleSidKey', Schema.SOAPType.String, false));
         scimNameToUserSObjectNameMap.put('timezone',new StandardAttributeProcessor('TimeZoneSidKey', Schema.SOAPType.String, false));
-        scimNameToUserSObjectNameMap.put('active', new StandardAttributeProcessor('IsActive', Schema.SOAPType.String, false));
+        scimNameToUserSObjectNameMap.put('active', new StandardAttributeProcessor('IsActive', Schema.SOAPType.Boolean, false));
         scimNameToUserSObjectNameMap.put('entitlements', new EntitlementsAttributeProcessor());
         scimNameToUserSObjectNameMap.put('groups', new GroupsAttributeProcessor());
         scimNameToUserSObjectNameMap.put('roles', new RolesAttributeProcessor());
@@ -812,14 +812,8 @@ global with sharing class UserResource extends ScimResource {
                 
                 String attributes = req.params.get('attributes');
                 String excludedAttributes = req.params.get('excludedAttributes');
-                // allowed soql query against inactive user
-                // but this will still return 0 records
-                String isActiveQuery = 'isActive = ';
-                if (user.active == null) {
-                    isActiveQuery += 'true';
-                } else isActiveQuery += user.active;
                 
-                String soql = FilterTranslator.buildAttributeQueryString(attributes, 'id eq \"' + u.id + '\"', null, null, scimNameToUserSObjectNameMap, 'User', 'isActive = true', null, null).getActualQuery();
+                String soql = FilterTranslator.buildAttributeQueryString(attributes, 'id eq \"' + u.id + '\"', null, null, scimNameToUserSObjectNameMap, 'User', null, null, null).getActualQuery();
                 List<User> users = Database.query(soql);
                 if (!users.isEmpty()) {
                     // active could be set to false in which case will not return.
@@ -926,7 +920,10 @@ global with sharing class UserResource extends ScimResource {
         // bulk get the psa assignments
         Map<Id, List<PermissionSetAssignment>> psaMap = new Map<Id, List<PermissionSetAssignment>>();
         if (shouldSerialize('entitlements', attributes)) {
-            for (PermissionSetAssignment psa : [select AssigneeId, PermissionSetId, PermissionSet.Name FROM PermissionSetAssignment WHERE assignee.isActive = true AND assigneeId IN :users and permissionSet.IsOwnedByProfile = false]) {
+            // disabled following line to enable permSet assignment against inactive users
+            // not sure this was entirely necessary
+            // for (PermissionSetAssignment psa : [select AssigneeId, PermissionSetId, PermissionSet.Name FROM PermissionSetAssignment WHERE assignee.isActive = true AND assigneeId IN :users and permissionSet.IsOwnedByProfile = false]) {
+            for (PermissionSetAssignment psa : [select AssigneeId, PermissionSetId, PermissionSet.Name FROM PermissionSetAssignment WHERE assigneeId IN :users and permissionSet.IsOwnedByProfile = false]) {
                 Id assigneeId = psa.AssigneeId;
                 List<PermissionSetAssignment> psas = psaMap.get(assigneeId);
                 if (psas == null) {
@@ -1347,7 +1344,7 @@ global with sharing class UserResource extends ScimResource {
                     }
                     
 //                    String soql = FilterTranslator.buildAttributeQueryString(attributes, filter, null, null, scimNameToUserSObjectNameMap, 'User',  'isActive = true', null, null).getActualQuery();
-                    String soql = FilterTranslator.buildAttributeQueryStringWithExcluded(attributes, excludedAttributes, filter, null, null, scimNameToUserSObjectNameMap, 'User',  'isActive = true', null, null).getActualQuery();
+                    String soql = FilterTranslator.buildAttributeQueryStringWithExcluded(attributes, excludedAttributes, filter, null, null, scimNameToUserSObjectNameMap, 'User', null, null, null).getActualQuery();
                     users = Database.query(soql);
 
                     if ( !users.isEmpty()  ) {
@@ -1404,7 +1401,7 @@ global with sharing class UserResource extends ScimResource {
         } 
         
         try {
-            String soql = FilterTranslator.buildAttributeQueryString(null, 'id eq \"' + uriParts[numParts] + '\"', null, null, scimNameToUserSObjectNameMap, 'User',  'isActive = true', null, null).getActualQuery();
+            String soql = FilterTranslator.buildAttributeQueryString(null, 'id eq \"' + uriParts[numParts] + '\"', null, null, scimNameToUserSObjectNameMap, 'User',  null, null, null).getActualQuery();
             List<User> users = Database.query(soql);
             if (users != null && users.size() == 1 ) {
                 User user = users.get(0);            

@@ -54,13 +54,11 @@ public class FilterTranslator {
         Integer state = 0;
         for (String token : tokens) {
             if (state == 0) {
-                System.debug('state: ' + state);
                 if (token.equals('(')) {
                     parsedString += '(';
                     nest++;
                     continue;
-                }
-                else if (token == 'emails.value'){
+                } else if (token == 'emails.value'){
                     currentProcessor = attributes.get('emails');
                     parsedString += currentProcessor.getSoqlAttributeForFilterGeneration();
                     state = 1;
@@ -192,7 +190,8 @@ public class FilterTranslator {
                     break;
                 }
                 
-                ScimSoqlAttributeProcessor attrProcessor = scimNameToSObjectNameMap.get(attr); 
+                ScimSoqlAttributeProcessor attrProcessor = scimNameToSObjectNameMap.get(attr);
+                System.debug(attr);
                 if (attrProcessor == null) {
                     throw new IllegalFilterEXception('Unsupported attribute: ' + attr);
                 }
@@ -318,9 +317,6 @@ public class FilterTranslator {
                 }
 
                 ScimSoqlAttributeProcessor attrProcessor = scimNameToSObjectNameMap.get(attr);
-                System.debug('attrProcessor: ' + attrProcessor);
-                System.debug('attrProcessor SOQL attr: ' + attrProcessor.getSoqlAttribute());
-
                 if (attrProcessor == null) {
                     throw new IllegalFilterEXception('Unsupported attribute: ' + attr);
                 }
@@ -331,7 +327,6 @@ public class FilterTranslator {
             }
             uniqueSObjectFieldNames.removeAll(excludedeSObjectFieldNames);            
         }
-
 
         for (String uniqueSObjectFileName : uniqueSObjectFieldNames) {
             if (uniqueSObjectFileName.length() != 0) {
@@ -351,13 +346,11 @@ public class FilterTranslator {
         }
         else {
             soql += ' from ' + table;
-            countSoql = 'select count(Id) count from ' + table + ' '; 
+            countSoql = 'select count(Id) from ' + table + ' '; 
         }
-        
         if (filter != NULL && filter.length() != 0) {
             FilterTranslator translator = new FilterTranslator(filter, scimNameToSObjectNameMap);
-            System.debug('pre-getTranslatedFilter');
-            String thisFilter = ' AND ( ' + translator.getTranslatedFilter() + ' ) ';
+            String thisFilter = ' WHERE ( ' + translator.getTranslatedFilter() + ' ) ';
             soql += thisFilter;
             countSoql += thisFilter;
         }
@@ -393,7 +386,6 @@ public class FilterTranslator {
                 soql += ' OFFSET ' + offset;
             }
         }
-        
 
         return new QueryHolder(countSoql, soql, noPagingSoql, lim, offset);
     }

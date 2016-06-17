@@ -52,6 +52,10 @@ global class UsersResource extends ScimResource {
             
             String startIndex = req.params.get('startIndex');
             String count = req.params.get('count');
+            // the following is defense against huge queries
+            if (count == null){
+                count = '10';
+            }
             
             if (attributes != null) {
                 attributes = attributes.replaceAll(' ', '');
@@ -65,8 +69,7 @@ global class UsersResource extends ScimResource {
             }
 
 //            QueryHolder queryHolder = FilterTranslator.buildAttributeQueryString(attributes, filter, startIndex, count, UserResource.scimNameToUserSObjectNameMap, 'User',  'isActive = true', null, null);
-            QueryHolder queryHolder = FilterTranslator.buildAttributeQueryStringWithExcluded(attributes, excludedAttributes, filter, startIndex, count, UserResource.scimNameToUserSObjectNameMap, 'User',  'isActive = true', null, null);
-
+            QueryHolder queryHolder = FilterTranslator.buildAttributeQueryStringWithExcluded(attributes, excludedAttributes, filter, startIndex, count, UserResource.scimNameToUserSObjectNameMap, 'User', null, null, null);
             Integer total = ScimResource.countQuery(queryHolder.getCountQuery());
             users = Database.query(queryHolder.getActualQuery());
 
