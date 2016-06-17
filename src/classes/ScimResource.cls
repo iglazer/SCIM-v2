@@ -102,7 +102,11 @@ global abstract with sharing class ScimResource {
     public static String parseString(String context, System.JSONParser parser) {
         parser.nextToken();
         JSONToken currentToken = parser.getCurrentToken();
-        if(currentToken != JSONToken.VALUE_STRING) {
+        // added null check to avoid parsing errors
+        // W-2891836
+        if (currentToken == JSONToken.VALUE_NULL){
+            return '';
+        } else if(currentToken != JSONToken.VALUE_STRING) {
             ParseException pex = new ParseException('Expecting VALUE_STRING But Found ' + currentToken + ' while parsing ' + context);
             pex.setStatusCode(400);
             throw pex;

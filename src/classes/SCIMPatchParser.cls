@@ -5,8 +5,14 @@ public class SCIMPatchParser {
     public class Operation {
         public String op;
         public String path;
-        public List<Map<String, Object>> value;
-    }    
+        public Map<String, String> value; // map<string, string> means no support for PATCHing complex objects
+    }
+    public static SCIMPatchParser parse(String json){
+        return (SCIMPatchParser) System.JSON.deserialize(json, SCIMPatchParser.class);
+    }
+/**
+ * this is original PATCH Parser
+ * Replaced with assumption that there is always a map in value    
     public SCIMPatchParser(String json){
         Map<String,Object> parsed = (Map<String, Object>)System.JSON.deserializeUntyped(json);
         List<Object> schemasObj = (List<Object>)parsed.get('schemas');
@@ -33,14 +39,15 @@ public class SCIMPatchParser {
                 for (Map<string, Object> f : foo1){
                     System.debug('listf: ' + f);
                 }
-/*
+
                 for (String o1 : foo1.keySet()){
                    // tempOp.value.add(new Map<String, Object>{o1 => foo1.get(o1)});
                    System.debug('O1: '+ o1);
                 }
-*/
+
             }                      
-            operations.add(tempOp);
+//            operations.add(tempOp);
         }
     }
+*/
 }

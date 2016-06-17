@@ -1,12 +1,13 @@
 @RestResource(urlMapping='/scim/v2/Schemas/*')
 global class SchemasResource {
-    private static Boolean doUser = true;
-    private static Boolean doGroup = true;
-    private static Boolean doEntitlement = true;
-    private static Boolean doRole = true;
-    private static Boolean doEnterprise = true;
-    private static Boolean doExternal = true;
-    private static Boolean doOrgCustom = true;
+    private static Boolean doUser = false;
+    private static Boolean doGroup = false;
+    private static Boolean doEntitlement = false;
+    private static Boolean doRole = false;
+    private static Boolean doEnterprise = false;
+    private static Boolean doExternal = false;
+    private static Boolean doOrgCustom = false;
+    private static Boolean doOther = false;
     
     @HttpGet
     global static void doGet() {
@@ -15,59 +16,37 @@ global class SchemasResource {
         String[] uriParts = req.requestURI.split('/',0);
         Integer numParts = uriParts.size() - 1;  
         String schemaType = uriParts[numParts];
-        
+
         if (schemaType.equalsIgnoreCase('urn:ietf:params:scim:schemas:core:2.0:User') || schemaType.equalsIgnoreCase('User')) {
-            doGroup = false;
-            doEntitlement = false;
-            doRole = false;
-            doEnterprise = false;
-            doExternal = false;
-            doOrgCustom = false;
+            doUser = true;
         } else if (schemaType.equalsIgnoreCase('urn:ietf:params:scim:schemas:core:2.0:Group') || schemaType.equalsIgnoreCase('Group')) {
-            doUser = false;
-            doEntitlement = false;
-            doRole = false;            
-            doEnterprise = false;
-            doExternal = false;
-            doOrgCustom = false;
+            doGroup = true;
         } else if (schemaType.equalsIgnoreCase('urn:salesforce:schemas:extension:1.0:Entitlement') || schemaType.equalsIgnoreCase('Entitlement')) {
-            doUser = false;
-            doGroup = false;
-            doRole = false;            
-            doEnterprise = false;
-            doExternal = false;
-            doOrgCustom = false;
+            doEntitlement = true;
         } else if (schemaType.equalsIgnoreCase('urn:salesforce:schemas:extension:1.0:Role') || schemaType.equalsIgnoreCase('Role')) {
-            doUser = false;
-            doGroup = false;
-            doEntitlement = false;            
-            doEnterprise = false;
-            doExternal = false;
-            doOrgCustom = false;
+            doRole = true;
         } else if (schemaType.equalsIgnoreCase('urn:ietf:params:scim:schemas:extension:enterprise:2.0:User')){
-            doUser = false;
-            doGroup = false;
-            doEntitlement = false;            
-            doRole = false;
-            doExternal = false;
-            doOrgCustom = false;
+            doEnterprise = true;
         } else if (schemaType.equalsIgnoreCase('urn:salesforce:schemas:extension:external:1.0')){
-            doUser = false;
-            doGroup = false;
-            doEntitlement = false;            
-            doEnterprise = false;
-            doRole = false;
-            doOrgCustom = false;
+            doExternal = true;
         } else if (schemaType.equalsIgnoreCase('urn:salesforce:schemas:extension:' + UserInfo.getOrganizationId())){
-            doUser = false;
-            doGroup = false;
-            doEntitlement = false;            
-            doEnterprise = false;
-            doRole = false;
-            doExternal = false;
+            doOrgCustom = true;
+        } else if (schemaType.equalsIgnoreCase('urn:salesforce:schemas:1.0:' + UserInfo.getOrganizationId())){
+            doOther = true;
         }
-        
-                                           
+
+        // do everything if nothing specified
+        if (numParts == 3) {
+            doUser = true;
+            doGroup = true;
+            doEntitlement = true;
+            doRole = true;
+            doEnterprise = true;
+            doExternal = true;
+            doOrgCustom = true;
+            doOther = true;
+        }
+                                                   
         res.addHeader('Content-Type', 'application/json');
         res.statusCode = 200; 
         res.responseBody = serializeSchemas(req.headers.containsKey('X-Prettyprint'));
@@ -76,7 +55,7 @@ global class SchemasResource {
     
     private static Blob serializeSchemas(boolean prettyPrint) {
 
-        Integer totalResults = 7;
+        Integer totalResults = 8;
 
         if (!doUser) totalResults--;
         if (!doGroup) totalResults--;
@@ -85,6 +64,7 @@ global class SchemasResource {
         if (!doEnterprise) totalResults--;
         if (!doExternal) totalResults--;
         if (!doOrgCustom) totalResults--;
+        if (!doOther) totalResults--;
         
         String base = URL.getSalesforceBaseUrl().toExternalForm();               
         String path = '/services/apexrest/scim/v2/';
@@ -907,7 +887,6 @@ global class SchemasResource {
             if (totalResults > 1){
                 gen.writeStartObject();
             }
-
                 gen.writeStringField('id', 'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'); 
                 gen.writeStringField('name', 'Enterprise User');   
                 gen.writeStringField('description', 'Schema resource for representing Enterprise User');               
@@ -1099,6 +1078,42 @@ global class SchemasResource {
             }
                       
         }        
+
+        if (doOther) {
+            if (totalResults > 1){
+                gen.writeStartObject();
+            }
+
+                gen.writeStringField('id', 'urn:salesforce:schemas:extension:1.0');                       
+                gen.writeStringField('name', 'urn:salesforce:schemas:extension:1.0');                       
+                gen.writeStringField('type', 'complex');   
+                gen.writeStringField('description', 'Salesforce User extensions');                   
+                gen.writeStringField('schema', 'urn:salesforce:schemas:extension:1.0');
+                gen.writeStringField('endpoint', '/Users');   
+                gen.writeFieldName('attributes');
+                gen.writeStartArray();
+                     gen.writeStartObject();
+                        gen.writeStringField('name', 'alias');                       
+                        gen.writeStringField('type', 'string');   
+                        gen.writeStringField('description', '8 character nickanme');                  
+                        gen.writeStringField('mutability', 'readWrite');                             
+                        gen.writeBooleanField('required', false); // a bit of a cheat                             
+                        gen.writeBooleanField('caseExact', false); 
+                    gen.writeEndObject();
+                gen.writeEndArray();                                                        
+            
+                gen.writeFieldName('meta');
+                gen.writeStartObject();
+                    gen.writeStringField('location', base + path + 'Schemas/urn:ietf:params:scim:schemas:extension:enterprise:2.0:User');
+                    gen.writeStringField('resourceType', 'Schema');
+                gen.writeEndObject();
+            
+            if (totalResults > 1){
+                    gen.writeEndObject();  
+            }
+                                                                                              
+
+        }
         
         
         if (totalResults > 1){

@@ -5,7 +5,10 @@ global with sharing class UserResource extends ScimResource {
     
     final private static String enterpriseExtensionURN = 'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User';
     final private static String externalSchemaURN = 'urn:salesforce:schemas:extension:external:1.0';
+    final private static String otherSchemaURN = 'urn:salesforce:schemas:extension:1.0';
     final private static String orgId = UserInfo.getOrganizationId();
+    
+    final private static String baseURL = '/services/apexrest/scim/v2/';
     
     final private static Set<String> portalUserTypes = new Set<String>();
     
@@ -101,9 +104,15 @@ global with sharing class UserResource extends ScimResource {
         
         // External User Extensions
         // TODO - parameterize type string
-        scimNameToUserSObjectNameMap.put('urn:salesforce:schemas:extension:external:1.0', new StandardAttributeProcessor('', SOAPType.String, true));
-        scimNameToUserSObjectNameMap.put('urn:salesforce:schemas:extension:external:1.0.accountId', new StandardAttributeProcessor('AccountId', SOAPType.String, false));
-        scimNameToUserSObjectNameMap.put('urn:salesforce:schemas:extension:external:1.0.contactId', new StandardAttributeProcessor('ContactId', SOAPType.String, false));
+        scimNameToUserSObjectNameMap.put(externalSchemaURN, new StandardAttributeProcessor('', SOAPType.String, true));
+        scimNameToUserSObjectNameMap.put(externalSchemaURN + ':accountId', new StandardAttributeProcessor('AccountId', SOAPType.String, false));
+        scimNameToUserSObjectNameMap.put(externalSchemaURN + ':contactId', new StandardAttributeProcessor('ContactId', SOAPType.String, false));
+        
+        // Alias
+        scimNameToUserSObjectNameMap.put(otherSchemaURN, new StandardAttributeProcessor('', SOAPType.String, true));        
+        scimNameToUserSObjectNameMap.put(otherSchemaURN + ':alias', new StandardAttributeProcessor('alias', SOAPType.String, false));        
+
+
     }
     
     private static boolean isFieldAccessible(String fieldName) {
@@ -148,6 +157,7 @@ global with sharing class UserResource extends ScimResource {
     public String password {get;set;}
     public Map<String,Object> customFieldValues {get;set;}
     public Map<String,Object> externalUserProperties {get;set;}
+    public Map<String,Object> otherUserProperties {get;set;}
 
     public List<Map<String, String>> operations {get;set;}
     
@@ -158,6 +168,7 @@ global with sharing class UserResource extends ScimResource {
      */
     public UserResource(Blob body) {
         System.JSONParser parser = System.JSON.createParser(body.toString());
+        
         while (parser.nextToken() != null) {
             if (isNextTokenField(parser,'schemas')) this.schemas = parseStringArray('schemas', parser);                            
             if (isNextTokenField(parser,'id')) this.id = parseString('id',parser);
@@ -190,6 +201,7 @@ global with sharing class UserResource extends ScimResource {
             if (isNextTokenField(parser,'password')) this.password = parseString('password', parser);
             if (isNextTokenField(parser,'urn:salesforce:schemas:extension:' + orgId)) this.customFieldValues = parseSimpleObject('urn:salesforce:schemas:extension:' + orgId, parser);
             if (isNextTokenField(parser,'urn:salesforce:schemas:extension:external:1.0')) this.externalUserProperties = parseSimpleObject('urn:salesforce:schemas:extension:external:1.0', parser);
+            if (isNextTokenField(parser,'urn:salesforce:schemas:extension:1.0')) this.otherUserProperties = parseSimpleObject('urn:salesforce:schemas:extension:1.0', parser);
             
             if (isNextTokenField(parser, 'meta')) {    
                 while ((parser.nextToken() != null) && (parser.getCurrentToken() != JSONToken.END_OBJECT)) {
@@ -302,18 +314,25 @@ global with sharing class UserResource extends ScimResource {
                     res.statusCode = 500;  
                 } 
             }
-                        
+            
+            // nickname 
             if ( user.nickName != null) {
                 u.communityNickname = user.nickName;
-                //u.alias = user.nickName;
             } else {
                 if ( isCreate ) {
-                    String timeString = Datetime.now().getTime().format().replace(',','');
-                    u.alias = timeString.substring(timeString.length() - 8, timeString.length());
                     u.communityNickname = user.userName;   
                 }
             }
             
+            // alias
+            if ((String)user.otherUserProperties.get('alias') != null){
+                u.Alias = (String)user.otherUserProperties.get('alias');
+            } else {
+                if (isCreate){
+                    String timeString = Datetime.now().getTime().format().replace(',','');
+                    u.alias = timeString.substring(timeString.length() - 8, timeString.length());                    
+                }
+            }
             //email
             if ((user.emails == null) || (user.emails.isEmpty())) {
                 if ( ( isCreate ) || ( isUpdate ) ) {
@@ -775,8 +794,13 @@ global with sharing class UserResource extends ScimResource {
                     if (user.password != null) {
                         System.setPassword(u.id, user.password);
                     }
-                    else {  
+                    /**
+                     * Added following to allow users to be created in inactive state
+                     * But overall this implimentation ignores inactive users
+                     * */
+                    else if (u.IsActive){  
                         System.resetPassword(u.id, true);
+                        res.statusCode = 200;
                     }
                 } else {
                     update u;
@@ -788,6 +812,13 @@ global with sharing class UserResource extends ScimResource {
                 
                 String attributes = req.params.get('attributes');
                 String excludedAttributes = req.params.get('excludedAttributes');
+                // allowed soql query against inactive user
+                // but this will still return 0 records
+                String isActiveQuery = 'isActive = ';
+                if (user.active == null) {
+                    isActiveQuery += 'true';
+                } else isActiveQuery += user.active;
+                
                 String soql = FilterTranslator.buildAttributeQueryString(attributes, 'id eq \"' + u.id + '\"', null, null, scimNameToUserSObjectNameMap, 'User', 'isActive = true', null, null).getActualQuery();
                 List<User> users = Database.query(soql);
                 if (!users.isEmpty()) {
@@ -890,8 +921,7 @@ global with sharing class UserResource extends ScimResource {
     public static void serializeUserWithGenerator(List<User> users, String attributes, String excludedAttributes, String host, JSONGenerator gen) {
               
         // based $ref for all scim objects
-        // bad practice right here
-        String scimRef = host + '/services/apexrest/scim/v2/';
+        String scimRef = host + baseURL;
         
         // bulk get the psa assignments
         Map<Id, List<PermissionSetAssignment>> psaMap = new Map<Id, List<PermissionSetAssignment>>();
@@ -1213,7 +1243,19 @@ global with sharing class UserResource extends ScimResource {
                         gen.writeEndObject();    
                     }
                 }            
-                
+
+
+                if (shouldSerialize(otherSchemaURN, attributes, excludedAttributes)) {
+                    System.debug('about to do alias');
+                    gen.writeFieldName('urn:salesforce:schemas:extension:1.0');
+                    gen.writeStartObject();
+                        if(shouldSerialize(otherSchemaURN + ':alias', attributes, excludedAttributes)){
+                            if (user.alias != null) gen.writeStringField('alias', user.alias);
+                        }
+                    gen.writeEndObject();    
+                }                    
+            
+            
                 if (shouldSerialize('meta', attributes, excludedAttributes)) {
                     gen.writeFieldName('meta');
                         gen.writeStartObject();
@@ -1454,8 +1496,9 @@ global with sharing class UserResource extends ScimResource {
         User tempUser = new User();
         tempUser.id = user.Id;
         
-        SCIMPatchParser userPP = new SCIMPatchParser(req.requestBody.toString());
+        SCIMPatchParser userPP = SCIMPatchParser.parse(req.requestBody.toString());
         String schema = userPP.schemas.get(0);
+        System.debug(schema);
         if (!schema.equals('urn:ietf:params:scim:api:messages:2.0:PatchOp')){
             res.statusCode = 400;
             res.responseBody = SCIMError.serializeError(res.statusCode, 'Improper Schema.', req.headers.containsKey('X-Prettyprint'));
@@ -1467,102 +1510,105 @@ global with sharing class UserResource extends ScimResource {
             for (SCIMPatchParser.Operation op : userPP.operations){
                 String operation = op.op;
                 String path = op.path;
+                Map<String, Object> value = op.value;
                 Set<String> values = new Set<String>();
 
                 if (path == null) {
-                    for (Map<String, Object> val : op.value){
-                        for (String key : val.keySet()){
+//                    for (Map<String, Object> val : op.value){
+//                        for (String key : val.keySet()){
+                    for (String key : value.keySet()){
+                        
                 // check key for validity
                             if ((!isUnsupported(key)) && (!isReadOnly(key))) {
                                 // key = givenName / firstName
                                 if ((key == 'givenName') && (operation == 'remove')) {
                                     tempUser.firstname = null;
                                 } else if (key == 'givenName'){
-                                    tempUser.firstname = (String) val.get(key);
+                                    tempUser.firstname = (String) value.get(key);
                                 }
 
                                 // key = familyName / lastName
                                 if ((key == 'familyName') && (operation == 'remove')) {
                                     tempUser.lastName = null;
                                 } else if (key == 'familyName'){
-                                    tempUser.lastName = (String) val.get(key);
+                                    tempUser.lastName = (String) value.get(key);
                                 }
                                 
                                 // key = title / title
                                 if ((key == 'title') && (operation == 'remove')) {
                                     tempUser.title = null;
                                 } else if (key == 'title'){
-                                    tempUser.title = (String) val.get(key);
+                                    tempUser.title = (String) value.get(key);
                                 }
 
                                 // key = preferredLanguage / languagelocalekey
                                 if ((key == 'preferredLanguage') && (operation == 'remove')) {
                                     tempUser.languagelocalekey = null;
                                 } else if (key == 'preferredLanguage'){
-                                    tempUser.languagelocalekey = (String) val.get(key);
+                                    tempUser.languagelocalekey = (String) value.get(key);
                                 }
 
                                 // key = locale / localesidkey
                                 if ((key == 'locale') && (operation == 'remove')) {
                                     tempUser.localesidkey = null;
                                 } else if (key == 'locale'){
-                                    tempUser.localesidkey = (String) val.get(key);
+                                    tempUser.localesidkey = (String) value.get(key);
                                 }
 
                                 // key = timezone / timezonesidkey
                                 if ((key == 'timezone') && (operation == 'remove')) {
                                     tempUser.timezonesidkey = null;
                                 } else if (key == 'timezone'){
-                                    tempUser.timezonesidkey = (String) val.get(key);
+                                    tempUser.timezonesidkey = (String) value.get(key);
                                 }
                                 
                                 // key = employeeNumber / employeeNumber
                                 if ((key == 'employeeNumber') && (operation == 'remove')) {
                                     tempUser.employeeNumber = null;
                                 } else if (key == 'employeeNumber'){
-                                    tempUser.employeeNumber = (String) val.get(key);
+                                    tempUser.employeeNumber = (String) value.get(key);
                                 }
 
                                 // key = division / division
                                 if ((key == 'division') && (operation == 'remove')) {
                                     tempUser.division = null;
                                 } else if (key == 'division'){
-                                    tempUser.division = (String) val.get(key);
+                                    tempUser.division = (String) value.get(key);
                                 }
 
                                 // key = department / department
                                 if ((key == 'department') && (operation == 'remove')) {
                                     tempUser.department = null;
                                 } else if (key == 'department'){
-                                    tempUser.department = (String) val.get(key);
+                                    tempUser.department = (String) value.get(key);
                                 }
 
                                 // key = nickName / communityNickname
                                 if ((key == 'nickName') && (operation == 'remove')) {
                                     tempUser.communityNickname = null;
                                 } else if (key == 'nickName'){
-                                    tempUser.communityNickname = (String) val.get(key);
+                                    tempUser.communityNickname = (String) value.get(key);
                                 }
 
                                 // manager / managerId
                                 if ((key == 'manager') && (operation == 'remove')) {
                                     tempUser.managerId = null;
                                 } else if (key == 'manager'){
-                                    tempUser.managerId = (Id) val.get(key);
+                                    tempUser.managerId = (Id) value.get(key);
                                 }
         
                                 // delegatedApprover / delegatedApproverId
                                 if ((key == 'delegatedApprover') && (operation == 'remove')) {
                                     tempUser.delegatedApproverId = null;
                                 } else if (key == 'delegatedApprover'){
-                                    tempUser.delegatedApproverId = (Id) val.get(key);
+                                    tempUser.delegatedApproverId = (Id) value.get(key);
                                 }
                                 
                                 // active / isActive
                                 if ((key == 'active') && (operation == 'remove')) {
                                     tempUser.isActive = false;
                                 } else if (key == 'active'){
-                                    tempUser.isActive = (Boolean) val.get(key);
+                                    tempUser.isActive = (Boolean) value.get(key);
                                 }
 
                                 // roles / userRoleId
@@ -1571,7 +1617,7 @@ global with sharing class UserResource extends ScimResource {
                                 } else if (key == 'roles'){
                                     Integer roleCount = 0;
                                     List<String> roleIds = new List<String>();
-                                    for (Object roleId : (List<Object>) val.get(key)){
+                                    for (Object roleId : (List<Object>) value.get(key)){
                                         roleIds.add((String)roleId);
                                         roleCount++;
                                     }
@@ -1588,9 +1634,9 @@ global with sharing class UserResource extends ScimResource {
                                 if (key == 'groups') {
                                     List<GroupMember> groupsToProcess = new List<GroupMember>();
                                     // there has got to be a better way to get the size here but object conversion was driving me crazy
-                                    List<Object> groupList = (List<Object>)val.get(key);                                    
+                                    List<Object> groupList = (List<Object>)value.get(key);                                    
                                     if (groupList.size() != 0 ){
-                                        for (Object g : (List<Object>) val.get(key)){
+                                        for (Object g : (List<Object>) value.get(key)){
                                             Map<String, Object> tempGroupId = (Map<String, Object>) g;
                                             GroupMember gm = new GroupMember();
                                             gm.GroupId = (String) tempGroupId.get('id');
@@ -1613,7 +1659,7 @@ global with sharing class UserResource extends ScimResource {
                                 // entitlements
                                 // expects list of entitlements to use id key
                                 if (key == 'entitlements'){
-                                  	if (operation == 'remove'){
+                                    if (operation == 'remove'){
                                         // cannot remove all entitlements
                                         // because you cannot remove profile
                                         res.statusCode = 500;
@@ -1629,9 +1675,9 @@ global with sharing class UserResource extends ScimResource {
                                     List<PermissionSetAssignment> permSetsToProcess = new List<PermissionSetAssignment>();                            
                                     String tempEntId;
                                     
-                                    List<Object> entsList = (List<Object>)val.get(key);
+                                    List<Object> entsList = (List<Object>)value.get(key);
                                     if (entsList.size() != 0){
-                                        for (Object entIter : (List<Object>) val.get(key)){
+                                        for (Object entIter : (List<Object>) value.get(key)){
                                             Map<String, Object> tempEntObj = (Map<String, Object>) entIter;
                                             tempEntId = (String) tempEntobj.get('id');
                                             if (tempEntId.startsWith('00e')) {
@@ -1720,8 +1766,10 @@ global with sharing class UserResource extends ScimResource {
 
                             }
                         }
-                    }
-                } else {
+                    
+                } 
+/* * deactivating PATH as method for attribute identification                
+                else {
                     // check path for validity
                     if ((!isUnsupported(path)) && (!isReadOnly(path))) {
                         // path = givenName / firstName
@@ -1991,7 +2039,7 @@ global with sharing class UserResource extends ScimResource {
                 } else {
                     SCIMException e = new SCIMException();
                     e.setMessage(error);
-					e.setStatusCode(res.statusCode);
+                    e.setStatusCode(res.statusCode);
                     throw e;
                 }
 
