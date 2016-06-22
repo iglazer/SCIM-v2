@@ -206,9 +206,9 @@ global abstract with sharing class ScimResource {
             // a.k.a. should = false
             List<String> excludedAttributeList = excludedAttributes.split(',');
             for (String thisAttribute : excludedAttributeList) {
-                System.debug('thisAttribute: ' + thisAttribute);
-                
                 //check for extended and custom schema
+                // this needs improvement
+                // it matchs of schema name not schema + attribute
                 if (attributeName.contains(':')){
                     if(thisAttribute.contains(attributeName)){
                         should = false;
@@ -274,13 +274,12 @@ global abstract with sharing class ScimResource {
                 }
             }            
         }
-        System.debug('should was: ' + should + ' for: ' + attributeName);
-        
         if (should) {
             boolean containsKey = scimNameToSObjectNameMap.containsKey(attributeName);
             return containsKey;
         }
 
+        System.debug('should: ' + should + ' for ' + attributeName);
         return should;
     }
     

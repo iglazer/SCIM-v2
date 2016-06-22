@@ -8,6 +8,7 @@ global class SchemasResource {
     private static Boolean doExternal = false;
     private static Boolean doOrgCustom = false;
     private static Boolean doOther = false;
+    private static Boolean doCommunities = false;
     
     @HttpGet
     global static void doGet() {
@@ -33,6 +34,8 @@ global class SchemasResource {
             doOrgCustom = true;
         } else if (schemaType.equalsIgnoreCase('urn:salesforce:schemas:1.0:' + UserInfo.getOrganizationId())){
             doOther = true;
+        } else if(schemaType.equalsIgnoreCase('urn:salesforce:schemas:extension:communities:1.0')){
+            doCommunities = true;
         }
 
         // do everything if nothing specified
@@ -45,6 +48,7 @@ global class SchemasResource {
             doExternal = true;
             doOrgCustom = true;
             doOther = true;
+            doCommunities = true;
         }
                                                    
         res.addHeader('Content-Type', 'application/json');
@@ -55,7 +59,7 @@ global class SchemasResource {
     
     private static Blob serializeSchemas(boolean prettyPrint) {
 
-        Integer totalResults = 8;
+        Integer totalResults = 9;
 
         if (!doUser) totalResults--;
         if (!doGroup) totalResults--;
@@ -65,6 +69,7 @@ global class SchemasResource {
         if (!doExternal) totalResults--;
         if (!doOrgCustom) totalResults--;
         if (!doOther) totalResults--;
+        if (!doCommunities) totalResults--;        
         
         String base = URL.getSalesforceBaseUrl().toExternalForm();               
         String path = '/services/apexrest/scim/v2/';
@@ -1024,19 +1029,70 @@ global class SchemasResource {
                         gen.writeBooleanField('required', false);                             
                         gen.writeBooleanField('caseExact', false); 
                     gen.writeEndObject();
+                    gen.writeStartObject();
+                        gen.writeStringField('name', 'community');                       
+                        gen.writeStringField('type', 'string');   
+                        gen.writeStringField('description', 'The network (Community) the user is a member of');             
+                        gen.writeStringField('mutability', 'readOnly');  
+                        gen.writeBooleanField('multiValued', true); 
+                        gen.writeBooleanField('required', false);                             
+                        gen.writeBooleanField('caseExact', false); 
+                    gen.writeEndObject();
                 gen.writeEndArray();                                                        
             
                 gen.writeFieldName('meta');
                 gen.writeStartObject();
-                    gen.writeStringField('location', base + path + 'Schemas/urn:ietf:params:scim:schemas:extension:enterprise:2.0:User');
+                    gen.writeStringField('location', base + path + 'Schemas/urn:salesforce:schemas:extension:external:1.0');
                     gen.writeStringField('resourceType', 'Schema');
                 gen.writeEndObject();
             
             if (totalResults > 1){
                     gen.writeEndObject();  
             }
-                                                                                              
+        }
+                    
+        if (doCommunities) {
+            if (totalResults > 1){
+                gen.writeStartObject();
+            }
 
+                gen.writeStringField('id', 'urn:salesforce:schemas:extension:communities:1.0');
+                gen.writeStringField('name', 'urn:salesforce:schemas:extension:communities:1.0');                       
+                gen.writeStringField('type', 'complex');   
+                gen.writeStringField('description', 'Salesforce Communities extensions');                   
+                gen.writeStringField('schema', 'urn:salesforce:schemas:extension:communities:1.0');
+                gen.writeStringField('endpoint', '/Users');   
+                gen.writeFieldName('attributes');
+                gen.writeStartArray();
+                    gen.writeStartObject();
+                        gen.writeStringField('name', 'networkId');                       
+                        gen.writeStringField('type', 'string');   
+                        gen.writeStringField('description', 'The Id of the network (Community) the user is a member of');             
+                        gen.writeStringField('mutability', 'readOnly');  
+                        gen.writeBooleanField('multiValued', false); 
+                        gen.writeBooleanField('required', false);                             
+                        gen.writeBooleanField('caseExact', false); 
+                    gen.writeEndObject();
+                    gen.writeStartObject();
+                        gen.writeStringField('name', 'networkName');                       
+                        gen.writeStringField('type', 'string');   
+                        gen.writeStringField('description', 'The Name of the network (Community) the user is a member of');             
+                        gen.writeStringField('mutability', 'readOnly');  
+                        gen.writeBooleanField('multiValued', false); 
+                        gen.writeBooleanField('required', false);                             
+                        gen.writeBooleanField('caseExact', false); 
+                    gen.writeEndObject();
+            gen.writeEndArray();                                                        
+            
+                gen.writeFieldName('meta');
+                gen.writeStartObject();
+                    gen.writeStringField('location', base + path + 'Schemas/urn:salesforce:schemas:extension:communities:1.0');
+                    gen.writeStringField('resourceType', 'Schema');
+                gen.writeEndObject();
+            
+            if (totalResults > 1){
+                    gen.writeEndObject();  
+            }
         }
 
         if (doOrgCustom){
@@ -1110,9 +1166,7 @@ global class SchemasResource {
             
             if (totalResults > 1){
                     gen.writeEndObject();  
-            }
-                                                                                              
-
+            }                                                                                              
         }
         
         

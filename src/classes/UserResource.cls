@@ -6,6 +6,7 @@ global with sharing class UserResource extends ScimResource {
     final private static String enterpriseExtensionURN = 'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User';
     final private static String externalSchemaURN = 'urn:salesforce:schemas:extension:external:1.0';
     final private static String otherSchemaURN = 'urn:salesforce:schemas:extension:1.0';
+    final private static String communitiesSchemaURN = 'urn:salesforce:schemas:extension:communities:1.0';
     final private static String orgId = UserInfo.getOrganizationId();
     
     final private static String baseURL = '/services/apexrest/scim/v2/';
@@ -108,6 +109,12 @@ global with sharing class UserResource extends ScimResource {
         scimNameToUserSObjectNameMap.put(externalSchemaURN + ':accountId', new StandardAttributeProcessor('AccountId', SOAPType.String, false));
         scimNameToUserSObjectNameMap.put(externalSchemaURN + ':contactId', new StandardAttributeProcessor('ContactId', SOAPType.String, false));
         
+        // Communities User Extension
+        // ReadOnly
+        scimNameToUserSObjectNameMap.put(communitiesSchemaURN, new StandardAttributeProcessor('', SOAPType.String, true));
+        scimNameToUserSObjectNameMap.put(communitiesSchemaURN + ':networkId', new NetworkAttributeProcessor());
+        scimNameToUserSObjectNameMap.put(communitiesSchemaURN + ':networkName', new NetworkAttributeProcessor());
+        
         // Alias
         scimNameToUserSObjectNameMap.put(otherSchemaURN, new StandardAttributeProcessor('', SOAPType.String, true));        
         scimNameToUserSObjectNameMap.put(otherSchemaURN + ':alias', new StandardAttributeProcessor('alias', SOAPType.String, false));        
@@ -158,6 +165,7 @@ global with sharing class UserResource extends ScimResource {
     public Map<String,Object> customFieldValues {get;set;}
     public Map<String,Object> externalUserProperties {get;set;}
     public Map<String,Object> otherUserProperties {get;set;}
+    public List<Map<String, String>> network {get;set;}
 
     public List<Map<String, String>> operations {get;set;}
     
@@ -323,16 +331,24 @@ global with sharing class UserResource extends ScimResource {
                     u.communityNickname = user.userName;   
                 }
             }
-            
+
             // alias
-            if ((String)user.otherUserProperties.get('alias') != null){
-                u.Alias = (String)user.otherUserProperties.get('alias');
+            if ((user.otherUserProperties) != null && (user.otherUserProperties.containsKey('alias'))){
+                String tempAlias = (String)user.otherUserProperties.get('alias');
+                if ( tempAlias.length() > 8){
+                    //truncate alias to 8 characters silently
+                    u.alias = tempAlias.substring(0,8);                    
+                } else {
+                    u.Alias = (String)user.otherUserProperties.get('alias');                    
+                }
+
             } else {
                 if (isCreate){
                     String timeString = Datetime.now().getTime().format().replace(',','');
                     u.alias = timeString.substring(timeString.length() - 8, timeString.length());                    
                 }
             }
+
             //email
             if ((user.emails == null) || (user.emails.isEmpty())) {
                 if ( ( isCreate ) || ( isUpdate ) ) {
@@ -396,20 +412,19 @@ global with sharing class UserResource extends ScimResource {
             
             if ( user.preferredLanguage != null) {
                 u.languagelocalekey = user.preferredLanguage;
-            } else {
+            } else if (isCreate) {
                 u.languagelocalekey = 'en_US';
             }
             
             if ( user.locale != null) {
                 u.localesidkey = user.locale;
-            } else {
+            } else if (isCreate){
                 u.localesidkey = 'en_US';
             }
     
             if ( user.timezone != null) {
                 u.timezonesidkey = user.timezone;
-            } else {
-                //TODO - improve default
+            } else if (isCreate){
                 u.timezonesidkey = 'America/Los_Angeles';
             }        
             
@@ -813,7 +828,7 @@ global with sharing class UserResource extends ScimResource {
                 String attributes = req.params.get('attributes');
                 String excludedAttributes = req.params.get('excludedAttributes');
                 
-                String soql = FilterTranslator.buildAttributeQueryString(attributes, 'id eq \"' + u.id + '\"', null, null, scimNameToUserSObjectNameMap, 'User', null, null, null).getActualQuery();
+                String soql = FilterTranslator.buildAttributeQueryStringWithExcluded(attributes, excludedAttributes, 'id eq \"' + u.id + '\"', null, null, scimNameToUserSObjectNameMap, 'User', null, null, null).getActualQuery();
                 List<User> users = Database.query(soql);
                 if (!users.isEmpty()) {
                     // active could be set to false in which case will not return.
@@ -919,7 +934,7 @@ global with sharing class UserResource extends ScimResource {
         
         // bulk get the psa assignments
         Map<Id, List<PermissionSetAssignment>> psaMap = new Map<Id, List<PermissionSetAssignment>>();
-        if (shouldSerialize('entitlements', attributes)) {
+        if (shouldSerialize('entitlements', attributes, excludedAttributes)) {
             // disabled following line to enable permSet assignment against inactive users
             // not sure this was entirely necessary
             // for (PermissionSetAssignment psa : [select AssigneeId, PermissionSetId, PermissionSet.Name FROM PermissionSetAssignment WHERE assignee.isActive = true AND assigneeId IN :users and permissionSet.IsOwnedByProfile = false]) {
@@ -936,7 +951,7 @@ global with sharing class UserResource extends ScimResource {
 
         // bulk get the group membership        
         Map<Id, List<GroupMember>> gmMap = new Map<Id, List<GroupMember>>();
-        if (shouldSerialize('groups', attributes)) {
+        if (shouldSerialize('groups', attributes, excludedAttributes)) {
             for (GroupMember gm : [ select UserOrGroupId, Id, GroupId, Group.Name from GroupMember where UserOrGroupId IN :users]) {
                 Id userOrGroupId = gm.UserOrGroupId;
                 List<GroupMember> gms = gmMap.get(userOrGroupId);
@@ -947,7 +962,23 @@ global with sharing class UserResource extends ScimResource {
                 gms.add(gm);
             }
         }
-    
+        
+        // bulk get the Network membership
+        Map<Id, List<NetworkMember>> nmMap = new Map<Id, List<NetworkMember>>();
+        if (shouldSerialize(communitiesSchemaURN, attributes, excludedAttributes)){
+            System.debug('i should serialize network membership');
+            for (NetworkMember nm : [select memberId, Id, networkId, network.name from NetworkMember where memberId IN :users]){
+                Id memberId = nm.MemberId;
+                List<NetworkMember> nms = nmMap.get(memberId);
+                if (nms == null){
+                    nms = new List<NetworkMember>();
+                    nmMap.put(memberId, nms);
+                }
+                nms.add(nm);
+            }
+            System.debug('nmMap: ' + nmMap);
+        }
+        
         for (User user : users) {
             Map<String, Schema.SObjectField> r = Schema.sObjectType.User.fields.getMap();
             Map<String, Object> customFieldMap = new Map<String, Object>();
@@ -1125,18 +1156,20 @@ global with sharing class UserResource extends ScimResource {
             
                 if (shouldSerialize('groups', attributes, excludedAttributes)) {
                     List<GroupMember> memberships = gmMap.get(user.id);
-                    gen.writeFieldName('groups');
-                    gen.writeStartArray();
-                        if (memberships != null) {
-                            for ( GroupMember membership : memberships ) {
-                                gen.writeStartObject();
-                                    gen.writeStringField('value', membership.GroupId);
-                                	gen.writeStringField('$ref', '/Groups/' + membership.GroupId);
-                                    gen.writeStringField('display', membership.Group.Name);
-                                gen.writeEndObject();        
+                    if (memberships != null) {
+                        gen.writeFieldName('groups');
+                        gen.writeStartArray();
+                            if (memberships != null) {
+                                for ( GroupMember membership : memberships ) {
+                                    gen.writeStartObject();
+                                        gen.writeStringField('value', membership.GroupId);
+                                        gen.writeStringField('$ref', '/Groups/' + membership.GroupId);
+                                        gen.writeStringField('display', membership.Group.Name);
+                                    gen.writeEndObject();        
+                                }
                             }
-                        }
-                    gen.writeEndArray(); 
+                        gen.writeEndArray();                         
+                    }
                 }        
                 
                 if (shouldSerialize('roles', attributes, excludedAttributes) && (user.userRoleId != null)) {
@@ -1223,9 +1256,25 @@ global with sharing class UserResource extends ScimResource {
                         if(shouldSerialize(externalSchemaURN + ':contactId', attributes, excludedAttributes)){
                             if (user.ContactId != null) gen.writeStringField('contactId', user.ContactId);
                         }
-
                     gen.writeEndObject();    
                 }                    
+                
+            if(shouldSerialize(communitiesSchemaURN, attributes, excludedAttributes)){
+                    List<NetworkMember> memberships = nmMap.get(user.id);
+                if (memberships != null) {
+                    gen.writeFieldName(communitiesSchemaURN);
+                    gen.writeStartArray();
+                        if (memberships != null) {
+                            for ( NetworkMember membership : memberships ) {
+                                gen.writeStartObject();
+                                    gen.writeStringField('value', membership.NetworkId);
+                                    gen.writeStringField('display', membership.Network.Name);
+                                gen.writeEndObject();        
+                            }
+                        }
+                    gen.writeEndArray();                     
+                }
+            }
                 
                 if (shouldSerialize('urn:salesforce:schemas:extension:' + UserInfo.getOrganizationId(), attributes, excludedAttributes)) {
                     if (!customFieldMap.isEmpty()) {    
@@ -1243,7 +1292,6 @@ global with sharing class UserResource extends ScimResource {
 
 
                 if (shouldSerialize(otherSchemaURN, attributes, excludedAttributes)) {
-                    System.debug('about to do alias');
                     gen.writeFieldName('urn:salesforce:schemas:extension:1.0');
                     gen.writeStartObject();
                         if(shouldSerialize(otherSchemaURN + ':alias', attributes, excludedAttributes)){
@@ -1586,6 +1634,21 @@ global with sharing class UserResource extends ScimResource {
                                 } else if (key == 'nickName'){
                                     tempUser.communityNickname = (String) value.get(key);
                                 }
+                                
+                                // key = alias
+                                System.debug('key: ' + key);
+                                if ((key == otherSchemaURN + ':alias') && (operation == 'remove')) {
+                                    tempUser.alias = null;
+                                } else if (key == otherSchemaURN + ':alias'){
+                                    String tempAlias = (String) value.get(key);
+                                    if ( tempAlias.length() > 8){
+                                        // truncate Alias to 8 characters silently
+                                        tempUser.alias = tempAlias.substring(0,8);                    
+                                    } else {
+                                        tempUser.alias = tempAlias;
+                                    }
+                                }
+                                
 
                                 // manager / managerId
                                 if ((key == 'manager') && (operation == 'remove')) {

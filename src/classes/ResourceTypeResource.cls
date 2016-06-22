@@ -94,6 +94,10 @@ global class ResourceTypeResource {
                         gen.writeStringField('schema', 'urn:salesforce:schemas:extension:1.0');
                         gen.writeStringField('required', 'false');
                     gen.writeEndObject();            
+                    gen.writeStartObject();
+                        gen.writeStringField('schema', 'urn:salesforce:schemas:extension:communities:1.0');
+                        gen.writeStringField('required', 'false');
+                    gen.writeEndObject();            
                 gen.writeEndArray();
                 gen.writeFieldName('meta');
                 gen.writeStartObject();

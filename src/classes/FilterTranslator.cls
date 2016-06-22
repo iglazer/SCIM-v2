@@ -147,7 +147,6 @@ public class FilterTranslator {
                 }
             }
             else if (state == 3) {
-                System.debug('state: ' + state);
                 currentProcessor = null;    // clear processor
                 token = token.toLowercase();
                 if (token.equals('and') || token.equals('or')) {
@@ -191,7 +190,6 @@ public class FilterTranslator {
                 }
                 
                 ScimSoqlAttributeProcessor attrProcessor = scimNameToSObjectNameMap.get(attr);
-                System.debug(attr);
                 if (attrProcessor == null) {
                     throw new IllegalFilterEXception('Unsupported attribute: ' + attr);
                 }
@@ -307,10 +305,7 @@ public class FilterTranslator {
 
         if (excludedAttributes != null){
             String[] exAttrs = excludedAttributes.split(',');
-            System.debug('exAttrs: ' + exAttrs);
-            for (string attr : exAttrs){
-                System.debug('attr: ' + attr);
-                
+            for (string attr : exAttrs){               
                 // hack to avoid organization from entering the query string
                 if(attr == 'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:organization') {
                     break;
