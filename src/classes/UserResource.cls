@@ -1526,6 +1526,12 @@ global with sharing class UserResource extends ScimResource {
     
     @HttpPatch
     global static void doPatch() {
+        // only using key for attribute identification
+        // awaiting IETF WG guidance on PATCH
+        // current approach doesn't work for complex attributes
+
+        // TODO make work with custom fields
+        // TODO make work with complex attributes
         RestRequest req = RestContext.request;
         RestResponse res = RestContext.response;
         res.addHeader('Content-Type', 'application/json');    
@@ -1546,7 +1552,6 @@ global with sharing class UserResource extends ScimResource {
         
         SCIMPatchParser userPP = SCIMPatchParser.parse(req.requestBody.toString());
         String schema = userPP.schemas.get(0);
-        System.debug(schema);
         if (!schema.equals('urn:ietf:params:scim:api:messages:2.0:PatchOp')){
             res.statusCode = 400;
             res.responseBody = SCIMError.serializeError(res.statusCode, 'Improper Schema.', req.headers.containsKey('X-Prettyprint'));
@@ -1555,528 +1560,272 @@ global with sharing class UserResource extends ScimResource {
         
         Savepoint sp = Database.setSavepoint();
         try {
+            String passwordString = null;
             for (SCIMPatchParser.Operation op : userPP.operations){
                 String operation = op.op;
                 String path = op.path;
                 Map<String, Object> value = op.value;
                 Set<String> values = new Set<String>();
-
-                if (path == null) {
-//                    for (Map<String, Object> val : op.value){
-//                        for (String key : val.keySet()){
-                    for (String key : value.keySet()){
-                        
-                // check key for validity
-                            if ((!isUnsupported(key)) && (!isReadOnly(key))) {
-                                // key = givenName / firstName
-                                if ((key == 'givenName') && (operation == 'remove')) {
-                                    tempUser.firstname = null;
-                                } else if (key == 'givenName'){
-                                    tempUser.firstname = (String) value.get(key);
-                                }
-
-                                // key = familyName / lastName
-                                if ((key == 'familyName') && (operation == 'remove')) {
-                                    tempUser.lastName = null;
-                                } else if (key == 'familyName'){
-                                    tempUser.lastName = (String) value.get(key);
-                                }
-                                
-                                // key = title / title
-                                if ((key == 'title') && (operation == 'remove')) {
-                                    tempUser.title = null;
-                                } else if (key == 'title'){
-                                    tempUser.title = (String) value.get(key);
-                                }
-
-                                // key = preferredLanguage / languagelocalekey
-                                if ((key == 'preferredLanguage') && (operation == 'remove')) {
-                                    tempUser.languagelocalekey = null;
-                                } else if (key == 'preferredLanguage'){
-                                    tempUser.languagelocalekey = (String) value.get(key);
-                                }
-
-                                // key = locale / localesidkey
-                                if ((key == 'locale') && (operation == 'remove')) {
-                                    tempUser.localesidkey = null;
-                                } else if (key == 'locale'){
-                                    tempUser.localesidkey = (String) value.get(key);
-                                }
-
-                                // key = timezone / timezonesidkey
-                                if ((key == 'timezone') && (operation == 'remove')) {
-                                    tempUser.timezonesidkey = null;
-                                } else if (key == 'timezone'){
-                                    tempUser.timezonesidkey = (String) value.get(key);
-                                }
-                                
-                                // key = employeeNumber / employeeNumber
-                                if ((key == 'employeeNumber') && (operation == 'remove')) {
-                                    tempUser.employeeNumber = null;
-                                } else if (key == 'employeeNumber'){
-                                    tempUser.employeeNumber = (String) value.get(key);
-                                }
-
-                                // key = division / division
-                                if ((key == 'division') && (operation == 'remove')) {
-                                    tempUser.division = null;
-                                } else if (key == 'division'){
-                                    tempUser.division = (String) value.get(key);
-                                }
-
-                                // key = department / department
-                                if ((key == 'department') && (operation == 'remove')) {
-                                    tempUser.department = null;
-                                } else if (key == 'department'){
-                                    tempUser.department = (String) value.get(key);
-                                }
-
-                                // key = nickName / communityNickname
-                                if ((key == 'nickName') && (operation == 'remove')) {
-                                    tempUser.communityNickname = null;
-                                } else if (key == 'nickName'){
-                                    tempUser.communityNickname = (String) value.get(key);
-                                }
-                                
-                                // key = alias
-                                System.debug('key: ' + key);
-                                if ((key == otherSchemaURN + ':alias') && (operation == 'remove')) {
-                                    tempUser.alias = null;
-                                } else if (key == otherSchemaURN + ':alias'){
-                                    String tempAlias = (String) value.get(key);
-                                    if ( tempAlias.length() > 8){
-                                        // truncate Alias to 8 characters silently
-                                        tempUser.alias = tempAlias.substring(0,8);                    
-                                    } else {
-                                        tempUser.alias = tempAlias;
-                                    }
-                                }
-                                
-
-                                // manager / managerId
-                                if ((key == 'manager') && (operation == 'remove')) {
-                                    tempUser.managerId = null;
-                                } else if (key == 'manager'){
-                                    tempUser.managerId = (Id) value.get(key);
-                                }
-        
-                                // delegatedApprover / delegatedApproverId
-                                if ((key == 'delegatedApprover') && (operation == 'remove')) {
-                                    tempUser.delegatedApproverId = null;
-                                } else if (key == 'delegatedApprover'){
-                                    tempUser.delegatedApproverId = (Id) value.get(key);
-                                }
-                                
-                                // active / isActive
-                                if ((key == 'active') && (operation == 'remove')) {
-                                    tempUser.isActive = false;
-                                } else if (key == 'active'){
-                                    tempUser.isActive = (Boolean) value.get(key);
-                                }
-
-                                // roles / userRoleId
-                                if ((key == 'roles') && (operation == 'remove')) {
-                                    tempUser.userRoleId = null;
-                                } else if (key == 'roles'){
-                                    Integer roleCount = 0;
-                                    List<String> roleIds = new List<String>();
-                                    for (Object roleId : (List<Object>) value.get(key)){
-                                        roleIds.add((String)roleId);
-                                        roleCount++;
-                                    }
-                                    if (roleCount != 1) {
-                                        error += 'INVALID:user_must_have_only_one_role;';  
-                                        res.statusCode = 400;
-                                        break;
-                                    } else {
-                                        tempUser.userRoleId = roleIds[0];
-                                    }
-                                }
-                                
-                                // groups
-                                if (key == 'groups') {
-                                    List<GroupMember> groupsToProcess = new List<GroupMember>();
-                                    // there has got to be a better way to get the size here but object conversion was driving me crazy
-                                    List<Object> groupList = (List<Object>)value.get(key);                                    
-                                    if (groupList.size() != 0 ){
-                                        for (Object g : (List<Object>) value.get(key)){
-                                            Map<String, Object> tempGroupId = (Map<String, Object>) g;
-                                            GroupMember gm = new GroupMember();
-                                            gm.GroupId = (String) tempGroupId.get('id');
-                                            gm.UserOrGroupId = user.id;
-                                            groupsToProcess.add(gm);
-                                        }
-                                    } else {
-                                         groupsToProcess = [select id from GroupMember where userOrGroupId =: user.id];
-                                    }
-                                    if  ((operation == 'remove') || (operation == 'replace')) {
-                                        // if replace then remove everything and add back what is specified
-                                        List<GroupMember> currentGroups = [select id, groupId from GroupMember where userOrGroupId =: user.id];
-                                        delete currentGroups;                                
-                                    }
-                                    if ((operation == 'add') || (operation == 'replace')){
-                                        insert groupsToProcess;
-                                    }
-                                }
-                                
-                                // entitlements
-                                // expects list of entitlements to use id key
-                                if (key == 'entitlements'){
-                                    if (operation == 'remove'){
-                                        // cannot remove all entitlements
-                                        // because you cannot remove profile
-                                        res.statusCode = 400;
-                                        error += 'INVALID: Cannot remove all entitlements. Use replace';
-                                        SCIMException e = new SCIMException();
-                                        e.setMessage(error);
-                                        e.setStatusCode(res.statusCode);
-                                        throw e;
-                                        
-                                    }
-                                    
-                                    List<String> profileToProcess = new List<String>();
-                                    List<PermissionSetAssignment> permSetsToProcess = new List<PermissionSetAssignment>();                            
-                                    String tempEntId;
-                                    
-                                    List<Object> entsList = (List<Object>)value.get(key);
-                                    if (entsList.size() != 0){
-                                        for (Object entIter : (List<Object>) value.get(key)){
-                                            Map<String, Object> tempEntObj = (Map<String, Object>) entIter;
-                                            tempEntId = (String) tempEntobj.get('id');
-                                            if (tempEntId.startsWith('00e')) {
-                                                profileToProcess.add(tempEntId);
-                                            } else if (tempEntId.startsWith('0PS')) {
-                                                PermissionSetAssignment psa = new PermissionSetAssignment();
-                                                psa.PermissionSetId = tempEntId;
-                                                psa.AssigneeId = user.id;
-                                                permSetsToProcess.add(psa);
-                                            } else {
-                                                //bad entitlement id
-                                                res.statusCode = 400;
-                                                error += 'INVALID entitlement id: ' + tempEntId;
-                                                SCIMException e = new SCIMException();
-                                                e.setMessage(error);
-                                                e.setStatusCode(res.statusCode);
-                                                throw e;
-                                            }
-                                        }
-                                    }
-                                    
-                                    if (operation == 'replace'){
-                                        if (profileToProcess.size() != 0){
-                                            if (profileToProcess.size() > 1){
-                                                // cannot have multiple profiles
-                                                res.statusCode = 400;
-                                                error += 'INVALID: cannot have multiple profiles: ' + profileToProcess;
-                                                SCIMException e = new SCIMException();
-                                                e.setMessage(error);
-                                                e.setStatusCode(res.statusCode);
-                                                throw e;
-                                            } else if (profileToProcess.size() == 1){
-                                                tempUser.ProfileId = profileToProcess[0];
-                                            }
-                                        }
-                                        if (permSetsToProcess.size() !=0){
-                                            // delete existing assignments
-                                            // then add new ones
-                                            List<PermissionSetAssignment> existingPSA = [select id from PermissionSetAssignment where assigneeId = :user.id AND PermissionSet.IsOwnedByProfile = False];
-                                            Database.delete(existingPSA);
-                                        }
-                                    }
-                                    
-                                    if ((operation == 'add') || (operation == 'replace')){
-                                        if ((profileToProcess.size() !=0) && (operation == 'add')){
-                                            // cannot have multiple profiles
-                                            res.statusCode = 400;
-                                            error += 'INVALID: cannot have multiple profiles: ' + profileToProcess;
-                                            SCIMException e = new SCIMException();
-                                            e.setMessage(error);
-                                            e.setStatusCode(res.statusCode);
-                                            throw e;
-                                        }
-                                        
-                                        // insert new permSets
-                                        Database.SaveResult[] newSRs = Database.insert(permSetsToProcess, false);
-                                        for (Database.SaveResult thisSR : newSRs) {
-                                            if (!thisSR.isSuccess()) {
-                                                for (Database.Error thisError : thisSR.getErrors()) {
-                                                    error += 'INVALID:' + thisError.getMessage() + ';';
-                                                }
-                                                res.statusCode = 400;
-                                            }
-                                        }      
-                                    }
-                                }
-                                
-                            } else {
-                                if (isUnsupported(key)){
-                                    res.statusCode = 400;
-                                    error += 'UNSUPPORTED_FIELD: ' + key;
-                                    SCIMException e = new SCIMException();
-                                    e.setMessage(error);
-                                    e.setStatusCode(400);
-                                    throw e;
-                                }
-                                
-                                if (isReadOnly(key)){
-                                    res.statusCode = 400;
-                                    error += 'INVALID: ' + key + ' is read only';
-                                    SCIMException e = new SCIMException();
-                                    e.setMessage(error);
-                                    e.setStatusCode(400);
-                                    throw e;
-                                }
-
-                            }
-                        }
+                for (String key : value.keySet()){
+                    // unsupported attributes
+                    if (isUnsupported(key)){
+                        res.statusCode = 400;
+                        error += 'UNSUPPORTED_FIELD: ' + key;
+                        SCIMException e = new SCIMException();
+                        e.setMessage(error);
+                        e.setStatusCode(400);
+                        throw e;
+                    }
                     
-                } 
-/* * deactivating PATH as method for attribute identification                
-                else {
-                    // check path for validity
-                    if ((!isUnsupported(path)) && (!isReadOnly(path))) {
-                        // path = givenName / firstName
-                        if (((path == 'givenName') || (path == 'name.givenName')) && (operation == 'remove')) {
-                            tempUser.firstname = null;
-                        } else if ((path == 'givenName') || (path == 'name.givenName')){
-                            tempUser.firstname = (String) op.value[0].get('value');
-                        }
+                    // key = givenName / firstName
+                    if ((key == 'givenName') && (operation == 'remove')) {
+                        tempUser.firstname = null;
+                    } else if (key == 'givenName'){
+                        tempUser.firstname = (String) value.get(key);
+                    }
 
-                        // familyName / lastName
-                        if (((path == 'familyName') || (path == 'name.familyName')) && (operation == 'remove')) {
-                            tempUser.lastname = null;
-                        } else if ((path == 'familyName') || (path == 'name.familyName')){
-                            tempUser.lastname = (String) op.value[0].get('value');
-                        }
-                        
-                        // title
-                        if ((path == 'title') && (operation == 'remove')) {
-                            tempUser.title = null;
-                        } else if (path == 'title'){
-                            tempUser.title = (String) op.value[0].get('value');
-                        }
-                
-                        // preferredLanguage / languagelocalekey
-                        if ((path == 'preferredLanguage') && (operation == 'remove')) {
-                            tempUser.languagelocalekey = null;
-                        } else if (path == 'preferredLanguage'){
-                            tempUser.languagelocalekey = (String) op.value[0].get('value');
-                        }
+                    // key = familyName / lastName
+                    if ((key == 'familyName') && (operation == 'remove')) {
+                        tempUser.lastName = null;
+                    } else if (key == 'familyName'){
+                        tempUser.lastName = (String) value.get(key);
+                    }
+                    
+                    // key = title / title
+                    if ((key == 'title') && (operation == 'remove')) {
+                        tempUser.title = null;
+                    } else if (key == 'title'){
+                        tempUser.title = (String) value.get(key);
+                    }
 
-                        // locale / localesidkey
-                        if ((path == 'preferredLanguage') && (operation == 'remove')) {
-                            tempUser.localesidkey = null;
-                        } else if (path == 'preferredLanguage'){
-                            tempUser.localesidkey = (String) op.value[0].get('value');
-                        }
+                    // key = preferredLanguage / languagelocalekey
+                    if ((key == 'preferredLanguage') && (operation == 'remove')) {
+                        tempUser.languagelocalekey = null;
+                    } else if (key == 'preferredLanguage'){
+                        tempUser.languagelocalekey = (String) value.get(key);
+                    }
 
-                        // timezone / timezonesidkey
-                        if ((path == 'timezone') && (operation == 'remove')) {
-                            tempUser.timezonesidkey = null;
-                        } else if (path == 'timezone'){
-                            tempUser.timezonesidkey = (String) op.value[0].get('value');
-                        }
+                    // key = locale / localesidkey
+                    if ((key == 'locale') && (operation == 'remove')) {
+                        tempUser.localesidkey = null;
+                    } else if (key == 'locale'){
+                        tempUser.localesidkey = (String) value.get(key);
+                    }
 
-                        // employeeNumber / employeeNumber
-                        if ((path == 'employeeNumber') && (operation == 'remove')) {
-                            tempUser.employeeNumber = null;
-                        } else if (path == 'employeeNumber'){
-                            tempUser.employeeNumber = (String) op.value[0].get('value');
-                        }
+                    // key = timezone / timezonesidkey
+                    if ((key == 'timezone') && (operation == 'remove')) {
+                        tempUser.timezonesidkey = null;
+                    } else if (key == 'timezone'){
+                        tempUser.timezonesidkey = (String) value.get(key);
+                    }
+                    
+                    // key = employeeNumber / employeeNumber
+                    if ((key == 'employeeNumber') && (operation == 'remove')) {
+                        tempUser.employeeNumber = null;
+                    } else if (key == 'employeeNumber'){
+                        tempUser.employeeNumber = (String) value.get(key);
+                    }
 
-                        // division / division
-                        if ((path == 'division') && (operation == 'remove')) {
-                            tempUser.division = null;
-                        } else if (path == 'division'){
-                            tempUser.division = (String) op.value[0].get('value');
-                        }
+                    // key = division / division
+                    if ((key == 'division') && (operation == 'remove')) {
+                        tempUser.division = null;
+                    } else if (key == 'division'){
+                        tempUser.division = (String) value.get(key);
+                    }
 
-                        // department / department
-                        if ((path == 'department') && (operation == 'remove')) {
-                            tempUser.department = null;
-                        } else if (path == 'department'){
-                            tempUser.department = (String) op.value[0].get('value');
-                        }
+                    // key = department / department
+                    if ((key == 'department') && (operation == 'remove')) {
+                        tempUser.department = null;
+                    } else if (key == 'department'){
+                        tempUser.department = (String) value.get(key);
+                    }
 
-                        // nickName / communityNickname
-                        if ((path == 'nickName') && (operation == 'remove')) {
-                            tempUser.communityNickname = null;
-                        } else if (path == 'nickName'){
-                            tempUser.communityNickname = (String) op.value[0].get('value');
+                    // key = nickName / communityNickname
+                    if ((key == 'nickName') && (operation == 'remove')) {
+                        tempUser.communityNickname = null;
+                    } else if (key == 'nickName'){
+                        tempUser.communityNickname = (String) value.get(key);
+                    }
+                    
+                    // key = alias
+                    if ((key == otherSchemaURN + ':alias') && (operation == 'remove')) {
+                        tempUser.alias = null;
+                    } else if (key == otherSchemaURN + ':alias'){
+                        String tempAlias = (String) value.get(key);
+                        if ( tempAlias.length() > 8){
+                            // truncate Alias to 8 characters silently
+                            tempUser.alias = tempAlias.substring(0,8);                    
+                        } else {
+                            tempUser.alias = tempAlias;
                         }
+                    }
+                    
+                    // manager / managerId
+                    if ((key == 'manager') && (operation == 'remove')) {
+                        tempUser.managerId = null;
+                    } else if (key == 'manager'){
+                        tempUser.managerId = (Id) value.get(key);
+                    }
 
-                        // manager / managerId
-                        if ((path == 'manager') && (operation == 'remove')) {
-                            tempUser.managerId = null;
-                        } else if (path == 'manager'){
-                            tempUser.managerId = (Id) op.value[0].get('value');
+                    // delegatedApprover / delegatedApproverId
+                    if ((key == 'delegatedApprover') && (operation == 'remove')) {
+                        tempUser.delegatedApproverId = null;
+                    } else if (key == 'delegatedApprover'){
+                        tempUser.delegatedApproverId = (Id) value.get(key);
+                    }
+                    
+                    // password
+                    if (key == 'password') {
+                        if (!user.IsActive){
+                            res.statusCode = 400;
+                            error += 'BAD REQUEST: Cannot change password for inactive user';  
+                        } else {
+                            passwordString = (String)value.get(key);
                         }
+                    }
+                    
+                    // active / isActive
+                    if ((key == 'active') && (operation == 'remove')) {
+                        tempUser.isActive = false;
+                    } else if (key == 'active'){
+                        tempUser.isActive = (Boolean) value.get(key);
+                    }
 
-                        // delegatedApprover / delegatedApproverId
-                        if ((path == 'delegatedApprover') && (operation == 'remove')) {
-                            tempUser.delegatedApproverId = null;
-                        } else if (path == 'delegatedApprover'){
-                            tempUser.delegatedApproverId = (Id) op.value[0].get('value');
+                    // roles / userRoleId
+                    if ((key == 'roles') && (operation == 'remove')) {
+                        tempUser.userRoleId = null;
+                    } else if (key == 'roles'){
+                        Integer roleCount = 0;
+                        List<String> roleIds = new List<String>();
+                        for (Object roleId : (List<Object>) value.get(key)){
+                            roleIds.add((String)roleId);
+                            roleCount++;
                         }
-                        
-                        // active / isActive
-                        if ((path == 'active') && (operation == 'remove')) {
-                            tempUser.isActive = false;
-                        } else if (path == 'active'){
-                            tempUser.isActive = (Boolean) op.value[0].get('value');
+                        if (roleCount != 1) {
+                            error += 'INVALID:user_must_have_only_one_role;';  
+                            res.statusCode = 400;
+                            break;
+                        } else {
+                            tempUser.userRoleId = roleIds[0];
                         }
-
-                        // roles / userRoleId
-                        // roles to use id key
-                        if ((path == 'roles') && (operation == 'remove')) {
-                            tempUser.userRoleId = null;
-                        } else if (path == 'roles'){
-                            Integer roleCount = 0;
-                            List<String> roleIds = new List<String>();
-                            for (Object roleId : (List<Object>) op.value[0].get('id')){
-                                roleIds.add((String)roleId);
-                                roleCount++;
+                    }
+                    
+                    // groups
+                    if (key == 'groups') {
+                        List<GroupMember> groupsToProcess = new List<GroupMember>();
+                        // there has got to be a better way to get the size here but object conversion was driving me crazy
+                        List<Object> groupList = (List<Object>)value.get(key);                                    
+                        if (groupList.size() != 0 ){
+                            for (Object g : (List<Object>) value.get(key)){
+                                Map<String, Object> tempGroupId = (Map<String, Object>) g;
+                                GroupMember gm = new GroupMember();
+                                gm.GroupId = (String) tempGroupId.get('id');
+                                gm.UserOrGroupId = user.id;
+                                groupsToProcess.add(gm);
                             }
-                            if (roleCount != 1) {
-                                error += 'INVALID:user_must_have_only_one_role;';  
-                                res.statusCode = 500;
-                                break;
-                            } else {
-                                tempUser.userRoleId = roleIds[0];
-                            }
+                        } else {
+                             groupsToProcess = [select id from GroupMember where userOrGroupId =: user.id];
                         }
-
-                        // groups
-                        // expects list of groups to use id key
-                        if (path == 'groups') {
-                            List<GroupMember> groupsToProcess = new List<GroupMember>();
-                            if (op.value.size() != 0) {
-                                for (Map<String, Object> vals : (List<Map<String, Object>>) op.value){
-                                    GroupMember gm = new GroupMember();
-                                    gm.GroupId = (String) vals.get('id');
-                                    gm.UserOrGroupId = user.id;
-                                    groupsToProcess.add(gm);
-                                }
-                            } else {
-                                 groupsToProcess = [select id from GroupMember where userOrGroupId =: user.id];
-                            }
-                            if  ((operation == 'remove') || (operation == 'replace')) {
-                                // if replace then remove everything and add back what is specified
-                                List<GroupMember> currentGroups = [select id, groupId from GroupMember where userOrGroupId =: user.id];
-                                delete currentGroups;                                
-                            }
-                            if ((operation == 'add') || (operation == 'replace')){
-                                insert groupsToProcess;
-                            }
+                        if  ((operation == 'remove') || (operation == 'replace')) {
+                            // if replace then remove everything and add back what is specified
+                            List<GroupMember> currentGroups = [select id, groupId from GroupMember where userOrGroupId =: user.id];
+                            delete currentGroups;                                
                         }
-                        
-                        // entitlements
-                        // expects list of entitlements to use id key
-                        if (path == 'entitlements'){
-                            List<String> profileToProcess = new List<String>();
-                            List<PermissionSetAssignment> permSetsToProcess = new List<PermissionSetAssignment>();                            
-                            String tempEntId;
-                            if (operation == 'remove'){
-                                // cannot remove all entitlements
-                                // because you cannot remove profile
-                                res.statusCode = 500;
-                                error += 'INVALID: Cannot remove all entitlements. Use replace';
-                                SCIMException e = new SCIMException();
-                                e.setMessage(error);
-                                e.setStatusCode(res.statusCode);
-                                throw e;
-                                
-                            }
-                            if (op.value.size() != 0) {
-                                for (Map<String, Object> vals : (List<Map<String, Object>>) op.value){
-                                    tempEntId = (String) vals.get('id');
-                                    if (tempEntId.startsWith('00e')) {
-                                        profileToProcess.add(tempEntId);
-                                    } else if (tempEntId.startsWith('0PS')) {
-                                        PermissionSetAssignment psa = new PermissionSetAssignment();
-                                        psa.PermissionSetId = tempEntId;
-                                        psa.AssigneeId = user.id;
-                                        permSetsToProcess.add(psa);
-                                    } else {
-                                        //bad entitlement id
-                                        res.statusCode = 500;
-                                        error += 'INVALID entitlement id: ' + tempEntId;
-                                        SCIMException e = new SCIMException();
-                                        e.setMessage(error);
-                                        e.setStatusCode(res.statusCode);
-                                        throw e;
-                                    }
-                                }
-                            }
+                        if ((operation == 'add') || (operation == 'replace')){
+                            insert groupsToProcess;
+                        }
+                    }
+                    
+                    // entitlements
+                    // expects list of entitlements to use id key
+                    if (key == 'entitlements'){
+                        if (operation == 'remove'){
+                            // cannot remove all entitlements
+                            // because you cannot remove profile
+                            res.statusCode = 400;
+                            error += 'INVALID: Cannot remove all entitlements. Use replace';
+                            SCIMException e = new SCIMException();
+                            e.setMessage(error);
+                            e.setStatusCode(res.statusCode);
+                            throw e;
                             
-                            if (operation == 'replace'){
-                                if (profileToProcess.size() != 0){
-                                    if (profileToProcess.size() > 1){
-                                        // cannot have multiple profiles
-                                        res.statusCode = 500;
-                                        error += 'INVALID: cannot have multiple profiles: ' + profileToProcess;
-                                        SCIMException e = new SCIMException();
-                                        e.setMessage(error);
-                                        e.setStatusCode(res.statusCode);
-                                        throw e;
-                                    } else if (profileToProcess.size() == 1){
-                                        tempUser.ProfileId = profileToProcess[0];
-                                    }
-                                }
-                                if (permSetsToProcess.size() !=0){
-                                    // delete existing assignments
-                                    // then add new ones
-                                    List<PermissionSetAssignment> existingPSA = [select id from PermissionSetAssignment where assigneeId = :user.id AND PermissionSet.IsOwnedByProfile = False];
-                                    Database.delete(existingPSA);
-                                }
-                            }
-                            
-                            if ((operation == 'add') || (operation == 'replace')){
-                                if ((profileToProcess.size() !=0) && (operation == 'add')){
-                                    // cannot have multiple profiles
-                                    res.statusCode = 500;
-                                    error += 'INVALID: cannot have multiple profiles: ' + profileToProcess;
+                        }
+                        
+                        List<String> profileToProcess = new List<String>();
+                        List<PermissionSetAssignment> permSetsToProcess = new List<PermissionSetAssignment>();                            
+                        String tempEntId;
+                        
+                        List<Object> entsList = (List<Object>)value.get(key);
+                        if (entsList.size() != 0){
+                            for (Object entIter : (List<Object>) value.get(key)){
+                                Map<String, Object> tempEntObj = (Map<String, Object>) entIter;
+                                tempEntId = (String) tempEntobj.get('id');
+                                if (tempEntId.startsWith('00e')) {
+                                    profileToProcess.add(tempEntId);
+                                } else if (tempEntId.startsWith('0PS')) {
+                                    PermissionSetAssignment psa = new PermissionSetAssignment();
+                                    psa.PermissionSetId = tempEntId;
+                                    psa.AssigneeId = user.id;
+                                    permSetsToProcess.add(psa);
+                                } else {
+                                    //bad entitlement id
+                                    res.statusCode = 400;
+                                    error += 'INVALID entitlement id: ' + tempEntId;
                                     SCIMException e = new SCIMException();
                                     e.setMessage(error);
                                     e.setStatusCode(res.statusCode);
                                     throw e;
                                 }
-
-                                // insert new permSets
-                                Database.SaveResult[] newSRs = Database.insert(permSetsToProcess, false);
-                                for (Database.SaveResult thisSR : newSRs) {
-                                    if (!thisSR.isSuccess()) {
-                                        for (Database.Error thisError : thisSR.getErrors()) {
-                                            error += 'INVALID:' + thisError.getMessage() + ';';
-                                        }
-                                        res.statusCode = 400;
-                                    }
-                                }      
                             }
                         }
                         
-                    } else {
-                        if (isUnsupported(path)){
-                            res.statusCode = 500;
-                            error += 'UNSUPPORTED_FIELD: ' + path;
-                            SCIMException e = new SCIMException();
-                            e.setMessage(error);
-                            e.setStatusCode(500);
-                            throw e;
+                        if (operation == 'replace'){
+                            if (profileToProcess.size() != 0){
+                                if (profileToProcess.size() > 1){
+                                    // cannot have multiple profiles
+                                    res.statusCode = 400;
+                                    error += 'INVALID: cannot have multiple profiles: ' + profileToProcess;
+                                    SCIMException e = new SCIMException();
+                                    e.setMessage(error);
+                                    e.setStatusCode(res.statusCode);
+                                    throw e;
+                                } else if (profileToProcess.size() == 1){
+                                    tempUser.ProfileId = profileToProcess[0];
+                                }
+                            }
+                            if (permSetsToProcess.size() !=0){
+                                // delete existing assignments
+                                // then add new ones
+                                List<PermissionSetAssignment> existingPSA = [select id from PermissionSetAssignment where assigneeId = :user.id AND PermissionSet.IsOwnedByProfile = False];
+                                Database.delete(existingPSA);
+                            }
                         }
                         
-                        if (isReadOnly(path)){
-                            res.statusCode = 500;
-                            error += 'INVALID: ' + path + ' is read only';
-                            SCIMException e = new SCIMException();
-                            e.setMessage(error);
-                            e.setStatusCode(500);
-                            throw e;
+                        if ((operation == 'add') || (operation == 'replace')){
+                            if ((profileToProcess.size() !=0) && (operation == 'add')){
+                                // cannot have multiple profiles
+                                res.statusCode = 400;
+                                error += 'INVALID: cannot have multiple profiles: ' + profileToProcess;
+                                SCIMException e = new SCIMException();
+                                e.setMessage(error);
+                                e.setStatusCode(res.statusCode);
+                                throw e;
+                            }
+                            
+                            // insert new permSets
+                            Database.SaveResult[] newSRs = Database.insert(permSetsToProcess, false);
+                            for (Database.SaveResult thisSR : newSRs) {
+                                if (!thisSR.isSuccess()) {
+                                    for (Database.Error thisError : thisSR.getErrors()) {
+                                        error += 'INVALID:' + thisError.getMessage() + ';';
+                                    }
+                                    res.statusCode = 400;
+                                }
+                            }      
                         }
-                        
                     }
-                }
-/*                
+
+                                /*
                 // email
                 // this likely wont work if email is sent in the value
                 // and not via path
@@ -2093,19 +1842,20 @@ global with sharing class UserResource extends ScimResource {
                             tempUser.email = (String) val.get('email');                        
                         }
                     }
-                }
-*/                                
-                    //tempUser = Database.query('select id, ' + attrQueryStr.left(attrQueryStr.length() - 2) + ' FROM User WHERE id = \'' + user.id + '\' limit 1');
-                
+                */
+                }                    
+                                
                 if (res.statusCode == 201){
-                    update tempUser;                
+                    update tempUser;
+                    if (passwordString != null){
+                        System.setPassword(user.id, passwordString);
+                    }
                 } else {
                     SCIMException e = new SCIMException();
                     e.setMessage(error);
                     e.setStatusCode(res.statusCode);
                     throw e;
                 }
-
             }
         } catch (SCIMException e) {
             res.addHeader('Content-Type', 'application/json');
@@ -2114,7 +1864,7 @@ global with sharing class UserResource extends ScimResource {
                 res.statusCode = 400;
             } 
             res.responseBody = ScimError.serializeError(res.statusCode, e.getMessage(), req.headers.containsKey('X-Prettyprint'));
-			Database.rollback(sp);
+            Database.rollback(sp);
             return;
         }
         doGet(); 
