@@ -237,9 +237,11 @@ global with sharing class UserResource extends ScimResource {
         }
     }     
     public static void doCreateOrUpdate(RestRequest req, RestResponse res, User u, String operation) {
+        // TODO remove PATCH from this and move appropriate items to doPatch
+
         Boolean isCreate = ( operation == 'POST' );
         Boolean isUpdate =  ( operation == 'PUT' );
-        Boolean isPatch =  ( operation == 'PATCH' );
+        Boolean isPatch =  ( operation == 'PATCH' ); 
         res.addHeader('Content-Type', 'application/json');    
         res.statusCode = 201;
         String error = '';
@@ -251,7 +253,7 @@ global with sharing class UserResource extends ScimResource {
             res.statusCode = scex.getStatusCode();
             error = scex.getMessage();
         } catch (Exception e) {
-            res.statusCode = 500;
+            res.statusCode = 400;
             error = e.getMessage();
         }
         
@@ -264,7 +266,7 @@ global with sharing class UserResource extends ScimResource {
             if ( isUpdate ) {
                 if ((user.id != null) && ( user.id != u.id)) {
                     error += 'INVALID:id_attribute_is_readonly;';  
-                    res.statusCode = 500;
+                    res.statusCode = 400;
                 }
             }
     
@@ -274,13 +276,13 @@ global with sharing class UserResource extends ScimResource {
                 }
                 else {
                     error += 'INVALID:externalId_not_available_in_your_organization;';  
-                    res.statusCode = 500;
+                    res.statusCode = 400;
                 }
             }
     
             if ( ( user.userName == null) && (  ( isCreate ) || ( isUpdate ) )  ){
                 error += 'REQUIRED_FIELD_MISSING:userName;';  
-                res.statusCode = 500;
+                res.statusCode = 400;
             } else {
                 if ( user.userName != null ) {
                     u.userName = user.userName;
@@ -293,7 +295,7 @@ global with sharing class UserResource extends ScimResource {
                 } else {
                     if ( ( isCreate ) || ( isUpdate ) ) {
                         error += 'REQUIRED_FIELD_MISSING:name.familyName;';  
-                        res.statusCode = 500;  
+                        res.statusCode = 400;  
                     } 
                 }
                 if (user.name.containsKey('givenName')) {
@@ -301,15 +303,15 @@ global with sharing class UserResource extends ScimResource {
                 }
                 if (user.name.containsKey('middleName')) {
                     error += 'UNSUPPORTED_FIELD:name.middleName;';  
-                    res.statusCode = 500;   
+                    res.statusCode = 400;   
                 }
                 if (user.name.containsKey('honorificPrefix')) {
                     error += 'UNSUPPORTED_FIELD:name.honorificPrefix;';  
-                    res.statusCode = 500;   
+                    res.statusCode = 400;   
                 }
                 if (user.name.containsKey('honorificSuffix')) {
                     error += 'UNSUPPORTED_FIELD:name.honorificSuffix;';  
-                    res.statusCode = 500;   
+                    res.statusCode = 400;   
                 }
             }
 
@@ -319,7 +321,7 @@ global with sharing class UserResource extends ScimResource {
             } else {
                 if ( ( isCreate ) || ( isUpdate ) ) {
                     error += 'REQUIRED_FIELD_MISSING:name.familyName;';  
-                    res.statusCode = 500;  
+                    res.statusCode = 400;  
                 } 
             }
             
@@ -353,11 +355,11 @@ global with sharing class UserResource extends ScimResource {
             if ((user.emails == null) || (user.emails.isEmpty())) {
                 if ( ( isCreate ) || ( isUpdate ) ) {
                     error += 'REQUIRED_FIELD_MISSING:email;';  
-                    res.statusCode = 500;
+                    res.statusCode = 400;
                 }
             } else if ( user.emails.size() != 1 ) {
                 error += 'INVALID:only_a_single_email_is_allowed;';  
-                res.statusCode = 500;
+                res.statusCode = 400;
             } else {
                 Map<String,String> email = user.emails.get(0);
                 if ( email.containsKey('value') ) {
@@ -365,7 +367,7 @@ global with sharing class UserResource extends ScimResource {
                 } else {
                     if ( ( isCreate ) || ( isUpdate ) ) {
                         error += 'REQUIRED_FIELD_MISSING:email;';  
-                        res.statusCode = 500;            
+                        res.statusCode = 400;            
                     }
                 }
             }
@@ -373,7 +375,7 @@ global with sharing class UserResource extends ScimResource {
             if ( user.addresses != null ) {
                 if ( user.addresses.size() > 1 ) {
                     error += 'INVALID:only_a_single_address_is_allowed;';  
-                    res.statusCode = 500;
+                    res.statusCode = 400;
                 } else if (user.addresses.size() == 1 ) {
                     Map<String,String> address = user.addresses.get(0);
                     if (address.containsKey('streetAddress')) u.street = address.get('streetAddress');
@@ -387,7 +389,7 @@ global with sharing class UserResource extends ScimResource {
             if ( user.phoneNumbers != null ) {
                 if ( user.phoneNumbers.size() > 1) {
                     error += 'INVALID:only_a_single_phone_is_allowed';
-                    res.statusCode = 500;
+                    res.statusCode = 400;
                 } else if ( user.phoneNumbers.size() == 1){
                     for (Map<String,String>phone : user.phoneNumbers) {
                         String val = null;
@@ -439,7 +441,7 @@ global with sharing class UserResource extends ScimResource {
             if (user.roles != null) { 
                 if ((user.roles.isEmpty()) || (user.roles.size() != 1) ) {
                     error += 'INVALID:user_must_have_only_one_role;';  
-                    res.statusCode = 500;
+                    res.statusCode = 400;
                 } else {
                     //TODO - improve this
                     u.put('userRoleId', user.roles.get(0).get('value'));
@@ -544,7 +546,7 @@ global with sharing class UserResource extends ScimResource {
             
             if ( ( isCreate  ||  isUpdate ) && u.get('profileid') == null ) {
                 error += 'REQUIRED_FIELD_MISSING:user_must_have_one_entitlement_which_must_be_a_profileid;';  
-                res.statusCode = 500;
+                res.statusCode = 400;
             }            
 
             //Groups
@@ -626,7 +628,7 @@ global with sharing class UserResource extends ScimResource {
             
             if ( user.costCenter != null ) {
                 error += 'UNSUPPORTED_FIELD:costCenter;';  
-                res.statusCode = 500;
+                res.statusCode = 400;
             } 
             
             
@@ -685,7 +687,7 @@ global with sharing class UserResource extends ScimResource {
                     }                                                    
                     else {
                         error += 'INVALID:unsupported field type for field : ' + customFieldName;  
-                        res.statusCode = 500;
+                        res.statusCode = 400;
                     }                                                                            
                 }
             }
@@ -694,6 +696,7 @@ global with sharing class UserResource extends ScimResource {
             // if userType is set and (.isPortal) then :
             // If no externalUserProperties -> create account and contact on the fly
             // if has externalUserProperties -> if has account create contact on the fly, otherwise use as is
+            // TODO add support to PersonAccount
             if (isCreate) {
                 if(u.profileId != null){
                     Id profileId = u.profileId; // required for create
@@ -865,7 +868,7 @@ global with sharing class UserResource extends ScimResource {
             res.statusCode = scex.getStatusCode();
             error = scex.getMessage();
         } catch (Exception e) {
-            res.statusCode = 500;
+            res.statusCode = 400;
             error = e.getMessage();
         }
     }
@@ -1683,7 +1686,7 @@ global with sharing class UserResource extends ScimResource {
                                     }
                                     if (roleCount != 1) {
                                         error += 'INVALID:user_must_have_only_one_role;';  
-                                        res.statusCode = 500;
+                                        res.statusCode = 400;
                                         break;
                                     } else {
                                         tempUser.userRoleId = roleIds[0];
@@ -1722,7 +1725,7 @@ global with sharing class UserResource extends ScimResource {
                                     if (operation == 'remove'){
                                         // cannot remove all entitlements
                                         // because you cannot remove profile
-                                        res.statusCode = 500;
+                                        res.statusCode = 400;
                                         error += 'INVALID: Cannot remove all entitlements. Use replace';
                                         SCIMException e = new SCIMException();
                                         e.setMessage(error);
@@ -1749,7 +1752,7 @@ global with sharing class UserResource extends ScimResource {
                                                 permSetsToProcess.add(psa);
                                             } else {
                                                 //bad entitlement id
-                                                res.statusCode = 500;
+                                                res.statusCode = 400;
                                                 error += 'INVALID entitlement id: ' + tempEntId;
                                                 SCIMException e = new SCIMException();
                                                 e.setMessage(error);
@@ -1763,7 +1766,7 @@ global with sharing class UserResource extends ScimResource {
                                         if (profileToProcess.size() != 0){
                                             if (profileToProcess.size() > 1){
                                                 // cannot have multiple profiles
-                                                res.statusCode = 500;
+                                                res.statusCode = 400;
                                                 error += 'INVALID: cannot have multiple profiles: ' + profileToProcess;
                                                 SCIMException e = new SCIMException();
                                                 e.setMessage(error);
@@ -1784,7 +1787,7 @@ global with sharing class UserResource extends ScimResource {
                                     if ((operation == 'add') || (operation == 'replace')){
                                         if ((profileToProcess.size() !=0) && (operation == 'add')){
                                             // cannot have multiple profiles
-                                            res.statusCode = 500;
+                                            res.statusCode = 400;
                                             error += 'INVALID: cannot have multiple profiles: ' + profileToProcess;
                                             SCIMException e = new SCIMException();
                                             e.setMessage(error);
@@ -1807,20 +1810,20 @@ global with sharing class UserResource extends ScimResource {
                                 
                             } else {
                                 if (isUnsupported(key)){
-                                    res.statusCode = 500;
+                                    res.statusCode = 400;
                                     error += 'UNSUPPORTED_FIELD: ' + key;
                                     SCIMException e = new SCIMException();
                                     e.setMessage(error);
-                                    e.setStatusCode(500);
+                                    e.setStatusCode(400);
                                     throw e;
                                 }
                                 
                                 if (isReadOnly(key)){
-                                    res.statusCode = 500;
+                                    res.statusCode = 400;
                                     error += 'INVALID: ' + key + ' is read only';
                                     SCIMException e = new SCIMException();
                                     e.setMessage(error);
-                                    e.setStatusCode(500);
+                                    e.setStatusCode(400);
                                     throw e;
                                 }
 
@@ -2108,7 +2111,7 @@ global with sharing class UserResource extends ScimResource {
             res.addHeader('Content-Type', 'application/json');
             res.statusCode = e.getStatusCode();
             if (res.statusCode == null) {
-                res.statusCode = 500;
+                res.statusCode = 400;
             } 
             res.responseBody = ScimError.serializeError(res.statusCode, e.getMessage(), req.headers.containsKey('X-Prettyprint'));
 			Database.rollback(sp);
