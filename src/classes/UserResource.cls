@@ -237,11 +237,10 @@ global with sharing class UserResource extends ScimResource {
         }
     }     
     public static void doCreateOrUpdate(RestRequest req, RestResponse res, User u, String operation) {
-        // TODO remove PATCH from this and move appropriate items to doPatch
+        // TODO add support for Person Account
 
         Boolean isCreate = ( operation == 'POST' );
         Boolean isUpdate =  ( operation == 'PUT' );
-        Boolean isPatch =  ( operation == 'PATCH' ); 
         res.addHeader('Content-Type', 'application/json');    
         res.statusCode = 201;
         String error = '';
@@ -433,11 +432,6 @@ global with sharing class UserResource extends ScimResource {
             if ( (user.active != null) && (!user.active) ) u.isActive = false;
             if ( (user.active != null) && (user.active) ) u.isActive = true;
             
-            if(isPatch && !u.isActive && user.password != null){
-                error += 'BAD REQUEST:password_reset_failed_because_one_or_more_users_are_inactive;';  
-                res.statusCode = 400;
-            }
-            
             if (user.roles != null) { 
                 if ((user.roles.isEmpty()) || (user.roles.size() != 1) ) {
                     error += 'INVALID:user_must_have_only_one_role;';  
@@ -449,21 +443,10 @@ global with sharing class UserResource extends ScimResource {
             }        
 
             // Profiles and Permission Sets
-            // PUT, PATCH, DELETE
-            if ( user.entitlements != null && !user.entitlements.isEmpty() && !isCreate) {
-                // if patch and meta attributes includes entitlements then we have to clear psas and profile
-                boolean isMetaDelete = false;
-                List<String> attributes = user.attributes;
-                if (isPatch && attributes != null) {
-                    for (String attribute : attributes) {
-                        if ('entitlements'.equals(attribute)) {
-                            isMetaDelete = true;
-                        }
-                    }
-                }
-                
+            // PUT, DELETE
+            if ( user.entitlements != null && !user.entitlements.isEmpty() && !isCreate) {                
                 List<PermissionSetAssignment> existingPsas = [Select Id, PermissionSetId from PermissionSetAssignment where AssigneeId = :u.Id AND PermissionSet.IsOwnedByProfile = False];
-                if (isMetaDelete || isUpdate) {
+                if (isUpdate) {
                     Database.delete(existingPsas, true);
                     u.put('profileid', null);
                 }
@@ -477,7 +460,6 @@ global with sharing class UserResource extends ScimResource {
                 
                 for (Map<String,String> entitlmentIdMap : user.entitlements) {
                     String entitlementId = (String) entitlmentIdMap.get('value');
-                    Boolean isDelete = !isMetaDelete && 'delete'.equals(entitlmentIdMap.get('operation'));
                     if (entitlementId != null) {
                         if (entitlementId.startsWith('00e')) {
                             u.put('profileid', entitlementId);
@@ -491,13 +473,6 @@ global with sharing class UserResource extends ScimResource {
                                 newPsas.add(thisPsa);
                                 // ignore if not there and is delete, per spec "MAY return a HTTP 400 error." which means I am free to not bother.
                             }
-                            else {
-                                // if is there and is delete, remove it
-                                if (isDelete) {
-                                    toDeletePsas.add(existingPermsetIdToPsas.get(entitlementId));
-                                }
-                            }
-                            
                         }
                     }
                 }
@@ -550,19 +525,9 @@ global with sharing class UserResource extends ScimResource {
             }            
 
             //Groups
-           // PUT, PATCH, DELETE
+           // PUT
            // Like PermSets Groups have to be added after user exists
-            if ( user.groups != null && !user.groups.isEmpty() && !isCreate){
-                boolean isMetaDelete = false;
-                List<String> attributes = user.attributes;
-                if (isPatch && attributes != null) {
-                    for (String attribute : attributes) {
-                        if ('entitlements'.equals(attribute)) {
-                            isMetaDelete = true;
-                        }
-                    }
-                }
-                
+            if ( user.groups != null && !user.groups.isEmpty() && !isCreate){             
                 List<GroupMember> existingGroups = [select Id, GroupId from GroupMember where UserOrGroupId = :u.id];
                 List<GroupMember> toDeleteGMs = new List<GroupMember>();
                 Map<Id, GroupMember> existingIdToGroups = new Map<Id, GroupMember>();
@@ -575,21 +540,17 @@ global with sharing class UserResource extends ScimResource {
                 
                 for (Map<String,String> groupIdMap : user.groups) {
                     String groupId = (String) groupIdMap.get('value');
-                    Boolean isDelete = !isMetaDelete && 'delete'.equals(groupIdMap.get('operation'));
                     if (groupId != null){
                         if (!existingGroupIds.contains(groupId)){
                             GroupMember thisGm = new GroupMember();
                             thisGm.UserOrGroupId = u.id;
                             thisGm.GroupId = groupId;
                             newGMs.add(thisGm);
-                        } else {
-                            if (isDelete) {
-                                toDeleteGMs.add(existingIdtoGroups.get(groupId));
-                            }
                         }
                     }
                 }
-				Database.DeleteResult[] deleteDRs = Database.delete(toDeleteGms, false);
+                
+                Database.DeleteResult[] deleteDRs = Database.delete(toDeleteGms, false);
                 for (Database.DeleteResult thisDR : deleteDRs) {
                 	if (!thisDR.isSuccess()) {
                 		for (Database.Error thisError : thisDR.getErrors()) {
@@ -696,6 +657,7 @@ global with sharing class UserResource extends ScimResource {
             // if userType is set and (.isPortal) then :
             // If no externalUserProperties -> create account and contact on the fly
             // if has externalUserProperties -> if has account create contact on the fly, otherwise use as is
+
             // TODO add support to PersonAccount
             if (isCreate) {
                 if(u.profileId != null){
@@ -969,7 +931,6 @@ global with sharing class UserResource extends ScimResource {
         // bulk get the Network membership
         Map<Id, List<NetworkMember>> nmMap = new Map<Id, List<NetworkMember>>();
         if (shouldSerialize(communitiesSchemaURN, attributes, excludedAttributes)){
-            System.debug('i should serialize network membership');
             for (NetworkMember nm : [select memberId, Id, networkId, network.name from NetworkMember where memberId IN :users]){
                 Id memberId = nm.MemberId;
                 List<NetworkMember> nms = nmMap.get(memberId);
@@ -979,7 +940,6 @@ global with sharing class UserResource extends ScimResource {
                 }
                 nms.add(nm);
             }
-            System.debug('nmMap: ' + nmMap);
         }
         
         for (User user : users) {
@@ -1530,8 +1490,10 @@ global with sharing class UserResource extends ScimResource {
         // awaiting IETF WG guidance on PATCH
         // current approach doesn't work for complex attributes
 
-        // TODO make work with custom fields
         // TODO make work with complex attributes
+        // TODO update related Contact if external user
+        // TODO figure out why type handling in custom fields is inconsistent
+        
         RestRequest req = RestContext.request;
         RestResponse res = RestContext.response;
         res.addHeader('Content-Type', 'application/json');    
@@ -1567,6 +1529,7 @@ global with sharing class UserResource extends ScimResource {
                 Map<String, Object> value = op.value;
                 Set<String> values = new Set<String>();
                 for (String key : value.keySet()){
+                    System.debug('key: ' + key);
                     // unsupported attributes
                     if (isUnsupported(key)){
                         res.statusCode = 400;
@@ -1675,6 +1638,8 @@ global with sharing class UserResource extends ScimResource {
                     }
                     
                     // password
+                    // not allowing password changes against inactive users
+                    // not sure why
                     if (key == 'password') {
                         if (!user.IsActive){
                             res.statusCode = 400;
@@ -1691,6 +1656,59 @@ global with sharing class UserResource extends ScimResource {
                         tempUser.isActive = (Boolean) value.get(key);
                     }
 
+                    // custom fields
+                    if (scimNameToUserSObjectNameMap.containsKey(key)){
+                        Object customFieldValue = scimNameToUserSObjectNameMap.get(key);
+                        ScimSoqlAttributeProcessor customProcessor =  scimNameToUserSObjectNameMap.get(key);
+                        
+                        // NOTE: customFieldValue is always a string, because of a limitation of 
+                        // the parseSimpleObject de-serializing always with getText.
+                        // making it dynamic there makes the method not simple in principle, so
+                        // for simplicity, we just coerce it back to the right type here based on
+                        // the field's type
+                        Schema.SOAPType type = customProcessor.getSOAPType();
+                        if (String.valueOf(type) == 'BOOLEAN'){
+                            System.debug(String.valueOf(type));
+                        }
+                        
+                        // TODO
+                        // should not have to do straigh string comparison
+                        // but cannot figure out why the same code copied from doCreateOrUpdate
+                        // won't work here
+                        if (String.valueOf(type) == 'BOOLEAN') {
+                            tempUser.put(customProcessor.getSoqlAttribute(), Boolean.valueOf(value.get(key)));
+                        }
+                        
+                        else if (String.valueOf(type) == 'DATE') {
+                           tempUser.put(customProcessor.getSoqlAttribute(), Date.valueOf(value.get(key)));
+                        }
+                        else if (String.valueOf(type) == 'DATETIME') {
+                           tempUser.put(customProcessor.getSoqlAttribute(), Datetime.valueOf(value.get(key)));
+                        }
+                        else if (String.valueOf(type) == 'DOUBLE') {
+                           tempUser.put(customProcessor.getSoqlAttribute(), Double.valueOf(value.get(key)));
+                        }
+                        else if (String.valueOf(type) == 'ID') {
+                           tempUser.put(customProcessor.getSoqlAttribute(), String.valueOf(value.get(key)));
+                        }
+                        else if (String.valueOf(type) == 'INTEGER') {
+                           tempUser.put(customProcessor.getSoqlAttribute(), Integer.valueOf(value.get(key)));
+                        }
+                        else if (String.valueOf(type) == 'STRING') {
+                           tempUser.put(customProcessor.getSoqlAttribute(), String.valueOf(value.get(key)));
+                        }
+                        else if (String.valueOf(type) == 'TIME') {
+                           tempUser.put(customProcessor.getSoqlAttribute(), Datetime.valueOf(value.get(key)));
+                        }     
+                        else if (String.valueOf(type) == 'BASE64BINARY') {
+                           tempUser.put(customProcessor.getSoqlAttribute(), EncodingUtil.base64Decode((String) value.get(key)));
+                        }                                                    
+                        else {
+                            error += 'INVALID:unsupported field type for field : ' + key;  
+                            res.statusCode = 400;
+                        }
+                    }
+                    
                     // roles / userRoleId
                     if ((key == 'roles') && (operation == 'remove')) {
                         tempUser.userRoleId = null;
@@ -1829,6 +1847,7 @@ global with sharing class UserResource extends ScimResource {
                 // email
                 // this likely wont work if email is sent in the value
                 // and not via path
+                // need better complex attribute story
                 if (op.path == 'email'){
                     if (operation == 'remove'){
                         tempUser.email = '';
