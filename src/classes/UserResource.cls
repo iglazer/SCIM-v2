@@ -1263,7 +1263,7 @@ global with sharing class UserResource extends ScimResource {
                     gen.writeEndObject();    
                 }                    
             
-            
+            // meta always serializes
                 if (shouldSerialize('meta', attributes, excludedAttributes)) {
                     gen.writeFieldName('meta');
                         gen.writeStartObject();

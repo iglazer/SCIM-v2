@@ -59,6 +59,7 @@ global class UsersResource extends ScimResource {
             
             if (attributes != null) {
                 attributes = attributes.replaceAll(' ', '');
+                attributes += ',meta';
             } else {
 //            	attributes = 'id,meta';
             }

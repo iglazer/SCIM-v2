@@ -144,7 +144,8 @@ global abstract with sharing class ScimResource {
                         break;
                     }
                 }
-            
+                
+                //TODO should split on : not . ?
                 List<String> renderingAttributeParts = attributeName.split('\\.');
                 List<String> thisAttributeParts = thisAttribute.split('\\.');
                 
@@ -206,11 +207,9 @@ global abstract with sharing class ScimResource {
             // a.k.a. should = false
             List<String> excludedAttributeList = excludedAttributes.split(',');
             for (String thisAttribute : excludedAttributeList) {
-                //check for extended and custom schema
-                // this needs improvement
-                // it matchs of schema name not schema + attribute
+
                 if (attributeName.contains(':')){
-                    if(thisAttribute.contains(attributeName)){
+                    if(thisAttribute.equals(attributeName)){
                         should = false;
                         break;
                     }
@@ -234,7 +233,8 @@ global abstract with sharing class ScimResource {
                         break;
                     }
                 }
-                
+ 
+                //TODO should split on : not . ?
                 List<String> renderingAttributeParts = attributeName.split('\\.');
                 List<String> thisAttributeParts = thisAttribute.split('\\.');
                 
