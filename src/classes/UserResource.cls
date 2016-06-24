@@ -659,6 +659,7 @@ global with sharing class UserResource extends ScimResource {
             // if has externalUserProperties -> if has account create contact on the fly, otherwise use as is
 
             // TODO add support to PersonAccount
+            RecordType personAccountRecordType =  [SELECT Id FROM RecordType WHERE Name = 'Person Account' and SObjectType = 'Account'];
             if (isCreate) {
                 if(u.profileId != null){
                     Id profileId = u.profileId; // required for create
@@ -666,8 +667,7 @@ global with sharing class UserResource extends ScimResource {
                     if (profiles.size() != 1) {
                         error += 'INVALID: profile id is invalid : ' + profileId;  
                         res.statusCode = 400;                        
-                    }
-                    else {
+                    } else {
                         Profile profile = profiles.get(0);
                         boolean inferringExternalUserProfile = isPortalType(profile.userType);
                         // only run this if user knows what he is doing, i.e. specified an appropriate profile type.
@@ -677,9 +677,26 @@ global with sharing class UserResource extends ScimResource {
                             if (user.externalUserProperties != null && user.externalUserProperties.get('accountId') != null) {
                                 // if set, just pick it up                        
                                 accountId = (Id) user.externalUserProperties.get('accountId');
+                            } else if (personAccountRecordType != null){
+                                // Person Accounts are enabled
+                                // So use them
+                                // TODO this code won't compile in an org w/o Person Account
+                                // TODO address this via .put of attributes and dynamic soql
+                                
+                                Account personAccount = new Account();
+                                personAccount.RecordType = personAccountRecordType;
+                                personAccount.FirstName = u.firstName;
+                                personAccount.LastName = u.lastName;
+                                personAccount.PersonEmail = u.email;
+                                personAccount.PersonTitle = u.title;
+                                Database.insert(personAccount);
+                                List<Account> personAccounts = [select personContactId from Account where id =: personAccount.id limit 1];
+                                contactId = personAccounts[0].PersonContactId;    
                             }
                             else {
-                                // else create one on the fly
+                                // TODO is this really what we want to do?
+                                // If PersonAccount NOT enabled and no Account.ID specified
+                                // else create account one on the fly                                
                                 Account jitAccount = new Account();
                                 jitAccount.Name = user.userName + 'JITUserAccount';
                                 jitAccount.OwnerId = UserInfo.getUserId();
@@ -687,11 +704,9 @@ global with sharing class UserResource extends ScimResource {
                                 accountId = jitAccount.Id;
                              }
          
-                            // if contact is set, use as is.
                             if (user.externalUserProperties != null && user.externalUserProperties.get('contactId') != null) {
                                 contactId = (Id) user.externalUserProperties.get('contactId');
-                            }
-                            else {
+                            } else if (contactId == null){
                                 // create a contact on the fly using the account
                                 Contact jitContact = new Contact();
                                 jitContact.FirstName = u.firstName;
@@ -840,6 +855,7 @@ global with sharing class UserResource extends ScimResource {
     }  
     
     public static void doDelete(System.RestRequest req, System.RestResponse res) {
+        // this doesn't remove any associated Contacts or Accounts
         String[] uriParts = req.requestURI.split('/',0);
         Integer numParts = uriParts.size() - 1;          
         String host = req.headers.get('Host');
