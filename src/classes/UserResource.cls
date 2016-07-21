@@ -1,5 +1,6 @@
 @RestResource(urlMapping='/scim/v2/Users/*')
 global with sharing class UserResource extends ScimResource {
+    // TODO Support Frozen
     final public static Map<String, ScimSoqlAttributeProcessor> scimNameToUserSObjectNameMap;
     final private static Map<String, Schema.SOAPType> customFieldToSoapTypeMap;
     
@@ -680,23 +681,25 @@ global with sharing class UserResource extends ScimResource {
                             } else if (personAccountRecordType != null){
                                 // Person Accounts are enabled
                                 // So use them
-                                // TODO this code won't compile in an org w/o Person Account
-                                // TODO address this via .put of attributes and dynamic soql
+                                // TODO verify this code will compile in non-person account enabled org
                                 
                                 Account personAccount = new Account();
                                 personAccount.RecordType = personAccountRecordType;
                                 personAccount.FirstName = u.firstName;
                                 personAccount.LastName = u.lastName;
-                                personAccount.PersonEmail = u.email;
-                                personAccount.PersonTitle = u.title;
+                                personAccount.put('PersonEmail', u.email);
+                                personAccount.put('PersonTitle', u.title);                                
                                 Database.insert(personAccount);
+
                                 List<Account> personAccounts = [select personContactId from Account where id =: personAccount.id limit 1];
                                 contactId = personAccounts[0].PersonContactId;    
                             }
                             else {
                                 // TODO is this really what we want to do?
                                 // If PersonAccount NOT enabled and no Account.ID specified
-                                // else create account one on the fly                                
+                                // else create account one on the fly
+                                // Instead - build interface to look up Account 
+                                // if that returns null pitch a fit                                
                                 Account jitAccount = new Account();
                                 jitAccount.Name = user.userName + 'JITUserAccount';
                                 jitAccount.OwnerId = UserInfo.getUserId();
@@ -864,12 +867,12 @@ global with sharing class UserResource extends ScimResource {
         if(u.size() == 1 && u[0].isActive) {
             
             //TODO Add check for certain conditions that make delete not so simple
+            //TODO By changing communityNickname do we screw things up in an active community?
             //Matt to provide
 //            User[] userRefedBy = Database.query('select id from user where id=\'' + uriParts[numParts] + '\'');
             u[0].isActive = false;
-            //added following for interop to pass soft delete-like tests
-            String tempUsername = 'X_' + u[0].username;
-            String tempNickname = 'X_' + u[0].CommunityNickname;
+            String tempUsername = u[0].id + '_' + u[0].username;
+            String tempNickname = u[0].id;
             u[0].username = tempUsername;
             u[0].CommunityNickname = tempNickname;
             update u[0];
@@ -1528,7 +1531,7 @@ global with sharing class UserResource extends ScimResource {
         User tempUser = new User();
         tempUser.id = user.Id;
         
-        SCIMPatchParser userPP = SCIMPatchParser.parse(req.requestBody.toString());
+        UserPatchParser userPP = UserPatchParser.parse(req.requestBody.toString());
         String schema = userPP.schemas.get(0);
         if (!schema.equals('urn:ietf:params:scim:api:messages:2.0:PatchOp')){
             res.statusCode = 400;
@@ -1539,7 +1542,7 @@ global with sharing class UserResource extends ScimResource {
         Savepoint sp = Database.setSavepoint();
         try {
             String passwordString = null;
-            for (SCIMPatchParser.Operation op : userPP.operations){
+            for (UserPatchParser.Operation op : userPP.operations){
                 String operation = op.op;
                 String path = op.path;
                 Map<String, Object> value = op.value;
@@ -1654,15 +1657,8 @@ global with sharing class UserResource extends ScimResource {
                     }
                     
                     // password
-                    // not allowing password changes against inactive users
-                    // not sure why
                     if (key == 'password') {
-                        if (!user.IsActive){
-                            res.statusCode = 400;
-                            error += 'BAD REQUEST: Cannot change password for inactive user';  
-                        } else {
-                            passwordString = (String)value.get(key);
-                        }
+                        passwordString = (String)value.get(key);
                     }
                     
                     // active / isActive
