@@ -68,8 +68,8 @@ global class RoleResource extends ScimResource {
         }
         
         String roleId = uriParts[numParts];
-		SCIMPatchParser rolePP = new SCIMPatchParser(req.requestBody.toString());
-		
+        RolePatchParser rolePP = RolePatchParser.parse(req.requestBody.toString());
+
         String schema = rolePP.schemas.get(0);
         if (!schema.equals('urn:ietf:params:scim:api:messages:2.0:PatchOp')){
             res.statusCode = 400;
@@ -78,61 +78,62 @@ global class RoleResource extends ScimResource {
         }
 
         Savepoint sp = Database.setSavepoint();        
-		try {
-			for (SCIMPatchParser.Operation op : rolePP.Operations){
-		        String operation = op.op;
+        try {
+            for (RolePatchParser.Operations op : rolePP.Operations){
+                String operation = op.op;
                 // Role Patch expects either path=members
-                // or a value value of "members":"ID"
                 // everything else will not be parsed
                 
                 List<User> usersToBeProcessed = new List<User>();
-                for (Map<String, Object> val : op.value){
+                for (RolePatchParser.Value val : op.value){
                     User tempUser = new User();
-                    if ((op.path=='members') && (val.keySet().contains('value'))){
-                        tempUser.Id = (id)val.get('value');
-                    } else if (val.keySet().contains('members')){
-                        tempUser.Id = (id)val.get('members');                        
+                    if (op.path != 'members'){
+                        res.statusCode = 400;
+                        res.responseBody = SCIMError.serializeError(res.statusCode, 'Improper Operation. path must be members', req.headers.containsKey('X-Prettyprint'));
+                        Database.rollback(sp);
+                        return;
                     }
+                    
+                    tempUser.Id = val.value;
                     usersToBeProcessed.add(tempUser);
                 }
                 for (User tempUser : usersToBeProcessed){
                     User u = [select id, userRoleId from User where id = :tempUser.id limit 1];
-                    
-	 		        if (operation == 'add'){
-	 		            if (u.userRoleId == null) {
-	 		                u.userRoleId = roleId;
-	 		                update u;
-	 		                res.statusCode = 204;
-	 		            } else {
-	 		                res.statusCode = 400;
-	 		                res.responseBody = SCIMError.serializeError(res.statusCode, 'Cannot \'add\' role to user who already has a role. Use \'replace\'', req.headers.containsKey('X-Prettyprint'));   
-	 			            Database.rollback(sp);
-	 						return;
-	 		            }
-	 		        } else if (operation == 'replace'){
-	 		            u.userRoleId = roleId;
-	 		            update u;                    
-	 		            res.statusCode = 204;            
-	 		        } else if  (operation == 'remove'){
-	 		            if (roleId == u.UserRoleId){
-	 		                u.UserRoleId = null;
-	 		                update u;
-	 		                res.statusCode = 204;                            
-	 		            } else {
-	 		                res.statusCode = 400;
-	 		                res.responseBody = SCIMError.serializeError(res.statusCode, 'Cannot remove a role that the user doesn\'t have', req.headers.containsKey('X-Prettyprint'));                    
-	 			            Database.rollback(sp);  
-	 						return;
-	 		            }
-	 		        } else {
-	 		            res.statusCode = 400;
-	 		            res.responseBody = SCIMError.serializeError(res.statusCode, 'Improper Operations', req.headers.containsKey('X-Prettyprint'));
-	 		            Database.rollback(sp);
-	   					return;
-	 		        }						 
-				}
-			}
-		} catch (Exception e) {
+                    if (operation == 'add'){
+                        if (u.userRoleId == null) {
+                            u.userRoleId = roleId;
+                            update u;
+                            res.statusCode = 204;
+                        } else {
+                            res.statusCode = 400;
+                            res.responseBody = SCIMError.serializeError(res.statusCode, 'Cannot \'add\' role to user who already has a role. Use \'replace\'', req.headers.containsKey('X-Prettyprint'));   
+                            Database.rollback(sp);
+                            return;
+                        }
+                    } else if (operation == 'replace'){
+                        u.userRoleId = roleId;
+                        update u;                    
+                        res.statusCode = 204;            
+                    } else if  (operation == 'remove'){
+                        if (roleId == u.UserRoleId){
+                            u.UserRoleId = null;
+                            update u;
+                            res.statusCode = 204;                            
+                        } else {
+                            res.statusCode = 400;
+                            res.responseBody = SCIMError.serializeError(res.statusCode, 'Cannot remove a role that the user doesn\'t have', req.headers.containsKey('X-Prettyprint'));                    
+                            Database.rollback(sp);  
+                            return;
+                        }
+                    } else {
+                        res.statusCode = 400;
+                        res.responseBody = SCIMError.serializeError(res.statusCode, 'Improper Operations', req.headers.containsKey('X-Prettyprint'));
+                        Database.rollback(sp);
+                        return;
+                    }
+                }
+            }
+        } catch (Exception e) {
             res.addHeader('Content-Type', 'application/json');
             if (res.statusCode == null) {
                 res.statusCode = 500;
@@ -140,15 +141,15 @@ global class RoleResource extends ScimResource {
             res.responseBody = ScimError.serializeError(res.statusCode, e.getMessage(), req.headers.containsKey('X-Prettyprint'));
             Database.rollback(sp);  
         }
-			        
+
         if (roleId != null) {
             // retrieve self
             doGet(roleId, null, false);
         }
-	}
-	
-	@HttpPost
-	global static void doPost(){
+    }
+
+    @HttpPost
+    global static void doPost(){
         RestRequest req = RestContext.request;
         RestResponse res = RestContext.response;
         String method = req.headers.get('X-HTTP-Method-Override');
@@ -163,9 +164,9 @@ global class RoleResource extends ScimResource {
                 doGet(roleId, null, true);
             }
         }
-	}
-	
-	// TODO - fix this, de-group-ify it
+    }
+
+    // TODO - fix this, de-group-ify it
     public static Id doUpsert(String roleId, System.JSONParser parser) {
         
         List<Map<String,String>> members;

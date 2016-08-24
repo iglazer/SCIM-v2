@@ -1531,8 +1531,10 @@ global with sharing class UserResource extends ScimResource {
         User tempUser = new User();
         tempUser.id = user.Id;
         
-        UserPatchParser userPP = UserPatchParser.parse(req.requestBody.toString());
+        UserPatchParserUntyped userPP = new UserPatchParserUntyped(req.requestBody.toString());
+//        UserPatchParser userPP = UserPatchParser.parse(req.requestBody.toString());
         String schema = userPP.schemas.get(0);
+        System.debug(schema);
         if (!schema.equals('urn:ietf:params:scim:api:messages:2.0:PatchOp')){
             res.statusCode = 400;
             res.responseBody = SCIMError.serializeError(res.statusCode, 'Improper Schema.', req.headers.containsKey('X-Prettyprint'));
@@ -1542,7 +1544,7 @@ global with sharing class UserResource extends ScimResource {
         Savepoint sp = Database.setSavepoint();
         try {
             String passwordString = null;
-            for (UserPatchParser.Operation op : userPP.operations){
+            for (UserPatchParserUntyped.Operation op : userPP.operations){
                 String operation = op.op;
                 String path = op.path;
                 Map<String, Object> value = op.value;

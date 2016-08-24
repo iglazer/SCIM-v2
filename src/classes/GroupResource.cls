@@ -26,7 +26,6 @@ global class GroupResource extends ScimResource {
         RestResponse res = RestContext.response;
         String[] uriParts = req.requestURI.split('/',0);
         Integer numParts = uriParts.size() - 1;   
-        
         if (numParts >= 4) { 
             res.statusCode = 404;
             res.responseBody = SCIMError.serializeError(res.statusCode, 'No such resource.', req.headers.containsKey('X-Prettyprint'));
@@ -37,11 +36,13 @@ global class GroupResource extends ScimResource {
         String groupId = uriParts[numParts];
         List<GroupMember> groupMembers = [Select Id from GroupMember where GroupId = :groupId];
         Database.delete(groupMembers, true);
-
-		doUpsert(groupId, System.JSON.createParser(req.requestBody.toString()));
+        doUpsert(groupId, System.JSON.createParser(req.requestBody.toString()));
 
     }
 
+    // TODO Changes to assumptions about PATCH have broken this completely
+    // TODO Fix
+    // assumes path = members
     @HttpPatch
     global static void doPatch() {
     
@@ -49,15 +50,15 @@ global class GroupResource extends ScimResource {
         RestResponse res = RestContext.response;
         String[] uriParts = req.requestURI.split('/',0);
         Integer numParts = uriParts.size() - 1;   
-        
-        if (numParts >= 4  || [select id from group where id = :uriParts[numParts]].size()==0){ 
+
+        if (numParts > 4  || [select id from group where id = :uriParts[numParts]].size()==0){ 
             res.statusCode = 404;
             res.responseBody = SCIMError.serializeError(res.statusCode, 'No such resource.', req.headers.containsKey('X-Prettyprint'));
             return;
         }
-		
+
         String groupId = uriParts[numParts];
-		SCIMPatchParser groupPP = new SCIMPatchParser(req.requestBody.toString());
+        GroupPatchParser groupPP = GroupPatchParser.parse(req.requestBody.toString());
         
         String schema = groupPP.schemas.get(0);
         if (!schema.equals('urn:ietf:params:scim:api:messages:2.0:PatchOp')){
@@ -67,64 +68,61 @@ global class GroupResource extends ScimResource {
         }
 
         Savepoint sp = Database.setSavepoint();        
-		try {
-			for (SCIMPatchParser.Operation op : groupPP.Operations){
-		        String operation = op.op;
+        try {
+            for (GroupPatchParser.Operations op : groupPP.Operations){
+                String operation = op.op;
                 // Group Patch expects either path=members
                 // or a value value of "members":"ID"
                 // everything else will not be parsed
 
                 // build list of member IDs
                 List<GroupMember> groupMembersToBeProcessed = new List<GroupMember>();
-                for (Map<String, Object> val : op.value){
-					GroupMember gm = new GroupMember();
-                    if ((op.path=='members') && (val.keySet().contains('value'))){
-                        gm.UserOrGroupId = (Id)val.get('value');
-                        gm.GroupId = groupId;
-                    } else if (val.keySet().contains('members')) {
-                        gm.UserOrGroupId = (Id)val.get('members');
-                        gm.GroupId = groupId;						                        
-                    }else {
-	 		            res.statusCode = 400;
-	 		            res.responseBody = SCIMError.serializeError(res.statusCode, 'Improper Operations', req.headers.containsKey('X-Prettyprint'));
-	 		            Database.rollback(sp);
-	   					return;
-	 		        }
-                	groupMembersToBeProcessed.add(gm);
+                for (GroupPatchParser.Value val : op.value){
+                    if (op.path != 'members'){
+                        res.statusCode = 400;
+                        res.responseBody = SCIMError.serializeError(res.statusCode, 'Improper Operation. path must be members', req.headers.containsKey('X-Prettyprint'));
+                        Database.rollback(sp);
+                        return;
+                    }
+                    
+                    GroupMember gm = new GroupMember();
+                    gm.UserOrGroupId = val.value;
+                    gm.GroupId = groupId;
+                    groupMembersToBeProcessed.add(gm);
                 }
-                				
-				// if operation is replace, then remove all assignemnts and reassign via add
-				if (operation == 'replace'){
+                
+                // if operation is replace, then remove all assignemnts and reassign via add
+                if (operation == 'replace'){
                     List<GroupMember> groupMember = [Select Id from GroupMember where groupId = :groupId];
                     if (!groupMember.isEmpty()) {
                         Database.delete(groupMember, true);
-                    }                                    
-				} else if (operation == 'add' || operation == 'replace') {
-					for (GroupMember member : groupMembersToBeProcessed){
+                    }
+                } else if (operation == 'add' || operation == 'replace') {
+                    for (GroupMember member : groupMembersToBeProcessed){
                         insert member;
                     }
-	                res.statusCode = 204;                            
-				} else if (operation == 'remove'){
-					for (GroupMember member : groupMembersToBeProcessed){
+                    res.statusCode = 204;
+                } else if (operation == 'remove'){
+                    for (GroupMember member : groupMembersToBeProcessed){
                         GroupMember tempGM = new GroupMember();
                         tempGM = [select Id from GroupMember where groupId = :member.GroupId and UserOrGroupId = :member.UserOrGroupId limit 1];
                         Database.delete(tempGM, true);
-                    }                    
-	                res.statusCode = 204;                                                             
-				} else {
-	                res.statusCode = 400;
-	                res.responseBody = SCIMError.serializeError(res.statusCode, 'Improper Operations', req.headers.containsKey('X-Prettyprint'));
-					return;
-	            }	
-
-			}
-		} catch (Exception e) {
+                    }
+                    res.statusCode = 204;                                                             
+                } else {
+                    res.statusCode = 400;
+                    res.responseBody = SCIMError.serializeError(res.statusCode, 'Improper Operations', req.headers.containsKey('X-Prettyprint'));
+                    return;
+                }
+            }
+        } catch (Exception e) {
             res.addHeader('Content-Type', 'application/json');
             if (res.statusCode == null) {
                 res.statusCode = 500;
             } 
             res.responseBody = ScimError.serializeError(res.statusCode, e.getMessage(), req.headers.containsKey('X-Prettyprint'));
-            Database.rollback(sp);  
+            Database.rollback(sp);
+            return;
         }
 
         if (groupId != null) {
@@ -132,7 +130,6 @@ global class GroupResource extends ScimResource {
             doGet(groupId, null, false);
         }
     }
-
     
     
     public static Id doUpsert(String groupId, System.JSONParser parser) {
@@ -179,7 +176,7 @@ global class GroupResource extends ScimResource {
                 }
             }
             
-			// defuse v1 .delete here
+            // defuse v1 .delete here
             // The meta operations are per the spec
             // They are quite unrestful
             
@@ -239,7 +236,7 @@ global class GroupResource extends ScimResource {
             }            
         }
         
-        String scimRef = host + '/services/apexrest/v2/';
+        String scimRef = host + '/services/apexrest/scim/v2/';
         for (Group g : groups) {
             gen.writeStartObject();
                 gen.writeFieldName('schemas');
